@@ -32,14 +32,25 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const addToast = useCallback(
     (message: string, type: ToastType = 'info', title?: string, duration: number = 4000) => {
-      const id = `${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-      setToasts((prev) => [...prev, { id, type, title, message, duration }]);
+      if (!message || !message.trim()) return;
+      const cleanMessage = message.trim();
 
-      if (duration > 0) {
-        setTimeout(() => {
-          removeToast(id);
-        }, duration);
-      }
+      setToasts((prev) => {
+        // Prevent duplicate toasts with the identical message and type
+        const isDuplicate = prev.some((t) => t.message === cleanMessage && t.type === type);
+        if (isDuplicate) return prev;
+
+        const id = `${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+        if (duration > 0) {
+          setTimeout(() => {
+            removeToast(id);
+          }, duration);
+        }
+
+        // Limit maximum simultaneous toasts on mobile to 3
+        const trimmed = prev.length >= 3 ? prev.slice(prev.length - 2) : prev;
+        return [...trimmed, { id, type, title, message: cleanMessage, duration }];
+      });
     },
     [removeToast]
   );

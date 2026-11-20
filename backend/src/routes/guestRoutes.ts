@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import { DataStore } from '../db/store.js';
+import { getFirebaseAuth } from '../services/firebaseAdmin.js';
 
 const uuidv4 = () => crypto.randomUUID();
 import {
@@ -16,11 +17,26 @@ const store = DataStore.getInstance();
 /**
  * POST /api/guest/workspaces
  * Creates a private, cryptographically secured Guest Workspace without requiring email or password.
+ * Optionally binds a Firebase Anonymous Auth UID if available.
  */
-router.post('/workspaces', (req: Request, res: Response) => {
+router.post('/workspaces', async (req: Request, res: Response) => {
   try {
     const workspaceId = `ws-guest-${uuidv4().substring(0, 10)}`;
     const workspaceName = req.body.name || `Guest Workspace (${workspaceId.slice(-6)})`;
+    const firebaseToken = req.body.firebaseToken || (req.headers['x-firebase-token'] as string);
+
+    let firebaseUid: string | undefined;
+    if (firebaseToken) {
+      try {
+        const auth = getFirebaseAuth();
+        if (auth) {
+          const decoded = await auth.verifyIdToken(firebaseToken);
+          firebaseUid = decoded.uid;
+        }
+      } catch (fbErr: any) {
+        console.warn('[Guest Auth] Firebase token verification skipped:', fbErr.message);
+      }
+    }
 
     // Generate cryptographic keys
     const recoveryKey = generateRecoveryKey();
@@ -50,6 +66,7 @@ router.post('/workspaces', (req: Request, res: Response) => {
         name: workspace.name,
         pairedDeviceIds: workspace.pairedDeviceIds,
         createdAt: workspace.createdAt,
+        firebaseUid,
       },
     });
   } catch (err: any) {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, type Variants } from 'motion/react';
 import {
   Circle,
@@ -320,6 +320,7 @@ const heroItemVariants: Variants = {
 function AuroraAuthScreen() {
   const { login, continueAsGuest, recoverGuest } = useAuth();
   const toast = useToast();
+  const isSubmittingRef = useRef<boolean>(false);
 
   // 1. Decision A: How to continue ('guest' | 'login' | 'register')
   const [authMode, setAuthMode] = useState<'guest' | 'login' | 'register'>('guest');
@@ -388,11 +389,13 @@ function AuroraAuthScreen() {
 
   const handleMainAction = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (isSubmittingRef.current || loading) return;
 
     localStorage.setItem('pocketprint_preferred_mode', selectedMode);
     localStorage.setItem('pocketprint_sender_device', senderDevice);
 
     if (authMode === 'guest') {
+      isSubmittingRef.current = true;
       setLoading(true);
       try {
         if (selectedMode === 'mode_c') {
@@ -407,8 +410,10 @@ function AuroraAuthScreen() {
             : 'Paired Gateway';
         toast.success(`Guest Workspace initialized for ${modeTitle}!`, 'Welcome to PocketPrint');
       } catch (err: any) {
-        toast.error(err.message || 'Failed to initialize workspace');
+        const errorMsg = err.userFriendlyMessage || err.message || 'Failed to initialize workspace';
+        toast.error(errorMsg);
       } finally {
+        isSubmittingRef.current = false;
         setLoading(false);
       }
     } else if (authMode === 'login') {
@@ -416,14 +421,17 @@ function AuroraAuthScreen() {
         toast.warning('Please enter both email and password');
         return;
       }
+      isSubmittingRef.current = true;
       setLoading(true);
       try {
         const res = await api.login({ email: email.trim(), password });
         login(res.token, res.user);
         toast.success(`Welcome back, ${res.user.name}!`, 'Authentication Succeeded');
       } catch (err: any) {
-        toast.error(err.message || 'Authentication failed');
+        const errorMsg = err.userFriendlyMessage || err.message || 'Authentication failed';
+        toast.error(errorMsg);
       } finally {
+        isSubmittingRef.current = false;
         setLoading(false);
       }
     } else if (authMode === 'register') {
@@ -431,14 +439,17 @@ function AuroraAuthScreen() {
         toast.warning('Please fill in all registration fields');
         return;
       }
+      isSubmittingRef.current = true;
       setLoading(true);
       try {
         const res = await api.register({ email: email.trim(), password, name: name.trim() });
         login(res.token, res.user);
         toast.success(`Account created for ${res.user.name}!`, 'Welcome to PocketPrint');
       } catch (err: any) {
-        toast.error(err.message || 'Account creation failed');
+        const errorMsg = err.userFriendlyMessage || err.message || 'Account creation failed';
+        toast.error(errorMsg);
       } finally {
+        isSubmittingRef.current = false;
         setLoading(false);
       }
     }
@@ -446,14 +457,15 @@ function AuroraAuthScreen() {
 
   const handleRecoverySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!recoveryInput.trim()) return;
+    if (!recoveryInput.trim() || recovering) return;
     setRecovering(true);
     try {
       await recoverGuest(recoveryInput.trim());
       toast.success('Workspace recovered successfully!', 'Welcome Back');
       setShowRecoveryModal(false);
     } catch (err: any) {
-      toast.error(err.message || 'Invalid recovery key');
+      const errorMsg = err.userFriendlyMessage || err.message || 'Invalid recovery key';
+      toast.error(errorMsg);
     } finally {
       setRecovering(false);
     }

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, GuestWorkspace } from '../types';
 import { api } from '../services/api';
+import { authenticateAnonymousGuest } from '../services/firebase';
 import { connectSocket, disconnectSocket } from '../services/socket';
 
 interface AuthContextType {
@@ -38,9 +39,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             localStorage.setItem('pocketprint_workspace_id', res.workspaceId);
           }
           connectSocket(token);
-        } catch (e) {
-          console.warn('Session expired or invalid, clearing local session');
-          logout();
+        } catch (e: any) {
+          // Only invalidate token if server explicitly rejected authentication (401)
+          if (e?.status === 401 || e?.code === 'HTTP_401') {
+            console.warn('Session expired or invalid, clearing local session');
+            logout();
+          } else {
+            console.warn('Network issue during session check, preserving local session:', e?.message);
+          }
         }
       }
       setIsLoading(false);
@@ -62,7 +68,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const continueAsGuest = async (name?: string) => {
-    const res = await api.createGuestWorkspace(name);
+    // 1. Attempt Firebase Anonymous Auth if configured
+    let fbToken: string | undefined = undefined;
+    try {
+      const fbResult = await authenticateAnonymousGuest();
+      if (fbResult.idToken) {
+        fbToken = fbResult.idToken;
+      }
+    } catch (fbErr: any) {
+      console.warn('[Auth] Firebase anonymous auth bypassed:', fbErr?.message);
+    }
+
+    // 2. Initialize private cryptographic Guest Workspace
+    const res = await api.createGuestWorkspace(name, fbToken);
     const { token: guestToken, workspace, recoveryKey: recKey } = res;
     localStorage.setItem('pocketprint_token', guestToken);
     localStorage.setItem('pocketprint_workspace_id', workspace.id);

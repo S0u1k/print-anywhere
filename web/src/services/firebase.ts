@@ -71,6 +71,39 @@ export {
 };
 
 /**
+ * Checks whether live production Firebase credentials are provided in the environment.
+ */
+export function isProductionFirebaseConfigured(): boolean {
+  const key = import.meta.env.VITE_FIREBASE_API_KEY;
+  return !!key && typeof key === 'string' && !key.includes('Demo') && key !== 'AIzaSyDemo-PocketPrint-Bridge-Key2026';
+}
+
+/**
+ * Executes Firebase Anonymous Authentication if configured.
+ * Safely falls back if running in offline, hybrid, or emulator mode without throwing unhandled exceptions.
+ */
+export async function authenticateAnonymousGuest(): Promise<{
+  user: User | null;
+  idToken: string | null;
+  error?: string;
+}> {
+  if (!isProductionFirebaseConfigured()) {
+    console.info('[Firebase] Hybrid local/relay mode active. Skipping live Firebase Anonymous sign-in.');
+    return { user: null, idToken: null };
+  }
+
+  try {
+    const credential = await fbSignInAnonymously(auth);
+    const idToken = await credential.user.getIdToken();
+    console.log('[Firebase Auth] Anonymous authentication successful for UID:', credential.user.uid);
+    return { user: credential.user, idToken };
+  } catch (err: any) {
+    console.warn('[Firebase Auth] Anonymous sign-in failed (continuing in hybrid mode):', err.code, err.message);
+    return { user: null, idToken: null, error: err.message };
+  }
+}
+
+/**
  * Link an existing Anonymous Guest user to an Email/Password account
  * Preserves the existing workspace and paired devices.
  */

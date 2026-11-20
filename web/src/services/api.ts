@@ -1,109 +1,75 @@
 import { Device, Printer, PrintJob, PrintJobEvent, PairingSession, User } from '../types';
+import { apiClient, getApiBaseUrl, ApiError, ApiErrorCode } from './apiClient';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-
-function getAuthHeaders(): HeadersInit {
-  const token = localStorage.getItem('pocketprint_token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
+export { apiClient, getApiBaseUrl, ApiError, type ApiErrorCode };
 
 export const api = {
   // Auth & Guest
-  async register(data: { email: string; password: string; name: string }) {
-    const res = await fetch(`${API_BASE}/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Registration failed' }));
-      throw new Error(err.error || 'Registration failed');
-    }
-    return res.json();
+  async register(data: { email: string; password: string; name: string }): Promise<{ token: string; user: User }> {
+    return apiClient.post('/auth/register', data);
   },
 
-  async login(data: { email: string; password: string }) {
-    const res = await fetch(`${API_BASE}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Login failed' }));
-      throw new Error(err.error || 'Login failed');
-    }
-    return res.json();
+  async login(data: { email: string; password: string }): Promise<{ token: string; user: User }> {
+    return apiClient.post('/auth/login', data);
   },
 
   async getMe(): Promise<{ user: User; workspaceId?: string }> {
-    const res = await fetch(`${API_BASE}/auth/me`, {
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Unauthorized');
-    return res.json();
+    return apiClient.get('/auth/me');
   },
 
-  async createGuestWorkspace(name?: string) {
-    const res = await fetch(`${API_BASE}/guest/workspaces`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Failed to create guest workspace' }));
-      throw new Error(err.error || 'Failed to create guest workspace');
-    }
-    return res.json();
+  async createGuestWorkspace(
+    name?: string,
+    firebaseToken?: string
+  ): Promise<{
+    message: string;
+    token: string;
+    recoveryKey: string;
+    workspace: {
+      id: string;
+      name: string;
+      pairedDeviceIds: string[];
+      createdAt: number;
+    };
+  }> {
+    return apiClient.post(
+      '/guest/workspaces',
+      { name, firebaseToken },
+      {
+        headers: firebaseToken ? { 'x-firebase-token': firebaseToken } : undefined,
+      }
+    );
   },
 
-  async recoverGuestWorkspace(recoveryKey: string) {
-    const res = await fetch(`${API_BASE}/guest/workspaces/recover`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recoveryKey }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Failed to recover guest workspace' }));
-      throw new Error(err.error || 'Failed to recover guest workspace');
-    }
-    return res.json();
+  async recoverGuestWorkspace(recoveryKey: string): Promise<{
+    message: string;
+    token: string;
+    workspace: {
+      id: string;
+      name: string;
+      pairedDeviceIds: string[];
+      createdAt: number;
+    };
+  }> {
+    return apiClient.post('/guest/workspaces/recover', { recoveryKey });
   },
 
-  async getCurrentWorkspace() {
-    const res = await fetch(`${API_BASE}/guest/workspaces/current`, {
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to load workspace info');
-    return res.json();
+  async getCurrentWorkspace(): Promise<{
+    workspaceId: string;
+    name: string;
+    isGuest: boolean;
+    pairedDevices: Device[];
+    printers: Printer[];
+    createdAt: number;
+  }> {
+    return apiClient.get('/guest/workspaces/current');
   },
 
   async forgotPassword(email: string): Promise<{ message: string; resetCode?: string }> {
-    const res = await fetch(`${API_BASE}/auth/forgot-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Request failed' }));
-      throw new Error(err.error || 'Request failed');
-    }
-    return res.json();
+    return apiClient.post('/auth/forgot-password', { email });
   },
 
   async resetPassword(data: { email: string; resetCode: string; newPassword: string }): Promise<{ message: string }> {
-    const res = await fetch(`${API_BASE}/auth/reset-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Password reset failed' }));
-      throw new Error(err.error || 'Password reset failed');
-    }
-    return res.json();
+    return apiClient.post('/auth/reset-password', data);
   },
 
   // Bidirectional Pairing Sessions
@@ -114,17 +80,15 @@ export const api = {
     initiatorOs: string;
     initiatorGatewayRole: string;
     printerModel?: string;
-  }) {
-    const res = await fetch(`${API_BASE}/pairing/sessions`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Failed to create pairing session' }));
-      throw new Error(err.error || 'Failed to create pairing session');
-    }
-    return res.json();
+  }): Promise<{
+    sessionId: string;
+    pairingCode: string;
+    qrToken: string;
+    qrPayload: string;
+    expiresAt: number;
+    initiatorDevice: any;
+  }> {
+    return apiClient.post('/pairing/sessions', data);
   },
 
   async claimPairingSession(
@@ -139,17 +103,8 @@ export const api = {
       claimerGatewayRole: string;
       printerModel?: string;
     }
-  ) {
-    const res = await fetch(`${API_BASE}/pairing/sessions/${sessionId}/claim`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Failed to claim pairing session' }));
-      throw new Error(err.error || 'Failed to claim pairing session');
-    }
-    return res.json();
+  ): Promise<{ message: string; session: PairingSession; deviceToken?: string }> {
+    return apiClient.post(`/pairing/sessions/${sessionId}/claim`, data);
   },
 
   async claimPairingByCode(data: {
@@ -160,151 +115,69 @@ export const api = {
     claimerOs: string;
     claimerGatewayRole: string;
     printerModel?: string;
-  }) {
-    const res = await fetch(`${API_BASE}/pairing/code/claim`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Failed to claim pairing code' }));
-      throw new Error(err.error || 'Failed to claim pairing code');
-    }
-    return res.json();
+  }): Promise<{ message: string; session?: PairingSession; deviceToken?: string; sessionId?: string; status?: string }> {
+    return apiClient.post('/pairing/code/claim', data);
   },
 
-  async approvePairingSession(sessionId: string, approved: boolean) {
-    const res = await fetch(`${API_BASE}/pairing/sessions/${sessionId}/approve`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ approved }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Approval failed' }));
-      throw new Error(err.error || 'Approval failed');
-    }
-    return res.json();
+  async approvePairingSession(
+    sessionId: string,
+    approved: boolean
+  ): Promise<{ message: string; session: PairingSession; deviceToken?: string }> {
+    return apiClient.post(`/pairing/sessions/${sessionId}/approve`, { approved });
   },
 
   async getPairingSessionStatus(sessionId: string): Promise<PairingSession> {
-    const res = await fetch(`${API_BASE}/pairing/sessions/${sessionId}/status`, {
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to load pairing status');
-    return res.json();
+    return apiClient.get(`/pairing/sessions/${sessionId}/status`);
   },
 
-  async cancelPairingSession(sessionId: string) {
-    const res = await fetch(`${API_BASE}/pairing/sessions/${sessionId}/cancel`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-    });
-    return res.json();
+  async cancelPairingSession(sessionId: string): Promise<{ message: string }> {
+    return apiClient.post(`/pairing/sessions/${sessionId}/cancel`);
   },
 
   // Devices
   async getDevices(): Promise<{ devices: Device[] }> {
-    const res = await fetch(`${API_BASE}/devices`, {
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to load devices');
-    return res.json();
+    return apiClient.get('/devices');
   },
 
   async renameDevice(deviceId: string, name: string): Promise<{ message: string; device: Device }> {
-    const res = await fetch(`${API_BASE}/devices/${deviceId}`, {
-      method: 'PATCH',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ name }),
-    });
-    if (!res.ok) throw new Error('Failed to rename device');
-    return res.json();
+    return apiClient.patch(`/devices/${deviceId}`, { name });
   },
 
-  async revokeDevice(deviceId: string) {
-    const res = await fetch(`${API_BASE}/devices/${deviceId}/revoke`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to revoke device');
-    return res.json();
+  async revokeDevice(deviceId: string): Promise<{ message: string }> {
+    return apiClient.post(`/devices/${deviceId}/revoke`);
   },
 
-  async deleteDevice(deviceId: string) {
-    const res = await fetch(`${API_BASE}/devices/${deviceId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to unpair device');
-    return res.json();
+  async deleteDevice(deviceId: string): Promise<{ message: string }> {
+    return apiClient.delete(`/devices/${deviceId}`);
   },
 
   // Printers
   async getPrinters(): Promise<{ printers: Printer[] }> {
-    const res = await fetch(`${API_BASE}/printers`, {
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to load printers');
-    return res.json();
+    return apiClient.get('/printers');
   },
 
-  async deletePrinter(printerId: string) {
-    const res = await fetch(`${API_BASE}/printers/${printerId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to delete printer');
-    return res.json();
+  async deletePrinter(printerId: string): Promise<{ message: string }> {
+    return apiClient.delete(`/printers/${printerId}`);
   },
 
   // Print Jobs
   async getJobs(): Promise<{ jobs: PrintJob[] }> {
-    const res = await fetch(`${API_BASE}/jobs`, {
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to load print jobs');
-    return res.json();
+    return apiClient.get('/jobs');
   },
 
   async getJob(id: string): Promise<{ job: PrintJob; events: PrintJobEvent[] }> {
-    const res = await fetch(`${API_BASE}/jobs/${id}`, {
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to load job details');
-    return res.json();
+    return apiClient.get(`/jobs/${id}`);
   },
 
   async uploadPrintJob(formData: FormData): Promise<{ message: string; job: PrintJob }> {
-    const token = localStorage.getItem('pocketprint_token');
-    const res = await fetch(`${API_BASE}/jobs/upload`, {
-      method: 'POST',
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: formData,
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Upload failed' }));
-      throw new Error(err.error || 'Upload failed');
-    }
-    return res.json();
+    return apiClient.post('/jobs/upload', formData);
   },
 
-  async cancelJob(id: string) {
-    const res = await fetch(`${API_BASE}/jobs/${id}/cancel`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to cancel job');
-    return res.json();
+  async cancelJob(id: string): Promise<{ message: string; job: PrintJob }> {
+    return apiClient.post(`/jobs/${id}/cancel`);
   },
 
-  async retryJob(id: string) {
-    const res = await fetch(`${API_BASE}/jobs/${id}/retry`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to retry job');
-    return res.json();
+  async retryJob(id: string): Promise<{ message: string; job: PrintJob }> {
+    return apiClient.post(`/jobs/${id}/retry`);
   },
 };
