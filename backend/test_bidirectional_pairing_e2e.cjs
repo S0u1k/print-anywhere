@@ -72,15 +72,41 @@ async function run() {
     record('Cloud Relay Health Check', health.status === 200 && health.data.status === 'ok', `status: ${health.status}`);
 
     // -------------------------------------------------------------
-    // TEST 2: Account Mode Authentication
+    // TEST 2: Account Mode Authentication (Register if fresh DB)
     // -------------------------------------------------------------
-    const loginRes = await request(
+    let loginRes = await request(
       { path: '/api/auth/login', method: 'POST' },
       { email: 'souvik@pocketprint.io', password: 'Password123!' }
     );
-    const accountToken = loginRes.data.token;
-    const accountUser = loginRes.data.user;
+    if (loginRes.status !== 200) {
+      await request(
+        { path: '/api/auth/register', method: 'POST' },
+        { name: 'Souvik Admin', email: 'souvik@pocketprint.io', password: 'Password123!' }
+      );
+      loginRes = await request(
+        { path: '/api/auth/login', method: 'POST' },
+        { email: 'souvik@pocketprint.io', password: 'Password123!' }
+      );
+    }
+    const accountToken = loginRes.data?.token;
+    const accountUser = loginRes.data?.user;
     record('Account Login (Souvik Admin)', loginRes.status === 200 && !!accountToken, `userId: ${accountUser?.id}`);
+
+    // Ensure account has a registered device for isolation comparison
+    if (accountToken) {
+      await request(
+        {
+          path: '/api/devices',
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accountToken}` },
+        },
+        {
+          name: 'Souvik Dedicated Office PC',
+          deviceType: 'LAPTOP',
+          gatewayRole: 'WINDOWS_GATEWAY',
+        }
+      );
+    }
 
     // -------------------------------------------------------------
     // TEST 3: Guest Workspace Creation & Recovery Key
