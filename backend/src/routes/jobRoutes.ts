@@ -3,8 +3,9 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
-import { v4 as uuidv4 } from 'uuid';
 import { DataStore } from '../db/store.js';
+
+const uuidv4 = () => crypto.randomUUID();
 import {
   requireSessionAuth,
   AuthenticatedRequest,
