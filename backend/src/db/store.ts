@@ -30,7 +30,9 @@ export class DataStore {
   private data: DatabaseData;
 
   private constructor(filePath?: string) {
-    this.filePath = filePath || path.join(process.cwd(), 'pocketprint_store.json');
+    this.filePath = filePath || (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME
+      ? path.join('/tmp', 'pocketprint_store.json')
+      : path.join(process.cwd(), 'pocketprint_store.json'));
     this.data = {
       users: [],
       guestWorkspaces: [],
