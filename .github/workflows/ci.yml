@@ -24,10 +24,10 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20.x
+      - name: Setup Node.js 22.x
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '22.x'
           cache: 'npm'
           cache-dependency-path: web/package.json
 
@@ -35,7 +35,7 @@ jobs:
         run: npm --prefix web install
 
       - name: TypeScript Static Type Checking
-        run: npx --prefix web tsc --noEmit
+        run: npm --prefix web run typecheck
 
       - name: Execute Web Unit Tests (Vitest)
         run: npm --prefix web test
@@ -58,10 +58,10 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20.x
+      - name: Setup Node.js 22.x
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '22.x'
           cache: 'npm'
           cache-dependency-path: backend/package.json
 
@@ -69,7 +69,7 @@ jobs:
         run: npm --prefix backend install
 
       - name: TypeScript Static Type Checking
-        run: npx --prefix backend tsc --noEmit
+        run: npm --prefix backend run typecheck
 
       - name: Execute Backend Unit Tests (Jest)
         run: npm --prefix backend test
@@ -138,10 +138,10 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20.x
+      - name: Setup Node.js 22.x
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '22.x'
 
       - name: Validate Firebase Configuration Files
         run: |

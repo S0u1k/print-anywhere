@@ -8,7 +8,8 @@
     "agent": "tsx src/laptopAgent.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "jest --passWithNoTests --forceExit"
+    "test": "jest --passWithNoTests --forceExit",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
