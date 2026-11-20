@@ -1,6 +1,16 @@
 # PocketPrint Bridge: Dual-Gateway Remote Printing Platform
 
+[![CI/CD Quality Gate](https://github.com/S0u1k/print-anywhere/actions/workflows/ci.yml/badge.svg)](https://github.com/S0u1k/print-anywhere/actions/workflows/ci.yml)
+[![Vercel Production](https://img.shields.io/badge/Vercel-Live%20Production-success?logo=vercel)](https://print-anywhere-three.vercel.app)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 **Enterprise-Grade Remote Internet Printing for Windows & Android Gateways**
+
+- **Live Production URL:** [https://print-anywhere-three.vercel.app](https://print-anywhere-three.vercel.app)
+- **GitHub Repository:** [https://github.com/S0u1k/print-anywhere](https://github.com/S0u1k/print-anywhere)
+- **CI/CD Pipeline Architecture:** [CI_CD_ARCHITECTURE.md](file:///d:/My%20Created%20Projects/printer%20home/CI_CD_ARCHITECTURE.md)
+- **Production Deployment Guide:** [DEPLOYMENT_GUIDE.md](file:///d:/My%20Created%20Projects/printer%20home/DEPLOYMENT_GUIDE.md)
+- **Firebase Deployment Guide:** [FIREBASE_DEPLOYMENT_GUIDE.md](file:///d:/My%20Created%20Projects/printer%20home/FIREBASE_DEPLOYMENT_GUIDE.md)
 
 PocketPrint Bridge is an open-source, dual-gateway remote printing platform. It decouples document authors on mobile phone browsers or remote laptops from physical printer connectivity, enabling reliable PDF printing to host-based printers—specifically targeting the **Canon PIXMA MG2570S**—through whichever device physically hosts the printer:
 
