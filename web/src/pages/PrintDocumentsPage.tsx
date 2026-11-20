@@ -51,16 +51,40 @@ export const PrintDocumentsPage: React.FC<PrintDocumentsPageProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
 
-  // Initialize selected destination
+  const preferredMode = (localStorage.getItem('pocketprint_preferred_mode') as any) || 'mode_a';
+
+  // Initialize selected destination, prioritizing user's active gateway mode
   React.useEffect(() => {
     if (!selectedDestinationId) {
+      if (preferredMode === 'mode_b') {
+        const androidPrn = printers.find((p) => p.gatewayType === 'ANDROID_USB');
+        const androidDev = devices.find((d) => d.gatewayType === 'ANDROID_USB' || (!d.gatewayType && !d.name.includes('Windows')));
+        if (androidPrn) {
+          setSelectedDestinationId(`printer:${androidPrn.id}`);
+          return;
+        } else if (androidDev) {
+          setSelectedDestinationId(`device:${androidDev.id}`);
+          return;
+        }
+      } else {
+        const winPrn = printers.find((p) => p.gatewayType === 'WINDOWS_HOST');
+        const winDev = devices.find((d) => d.gatewayType === 'WINDOWS_HOST' || d.name.includes('Windows'));
+        if (winPrn) {
+          setSelectedDestinationId(`printer:${winPrn.id}`);
+          return;
+        } else if (winDev) {
+          setSelectedDestinationId(`device:${winDev.id}`);
+          return;
+        }
+      }
+
       if (printers.length > 0) {
         setSelectedDestinationId(`printer:${printers[0].id}`);
       } else if (devices.length > 0) {
         setSelectedDestinationId(`device:${devices[0].id}`);
       }
     }
-  }, [printers, devices, selectedDestinationId]);
+  }, [printers, devices, selectedDestinationId, preferredMode]);
 
   // Resolve target details
   let targetName = 'No destination selected';

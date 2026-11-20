@@ -17,6 +17,7 @@ import {
   Laptop,
   Smartphone,
   Check,
+  QrCode,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -50,6 +51,23 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const [copies, setCopies] = useState<number>(1);
   const [colorMode, setColorMode] = useState<'COLOR' | 'MONOCHROME'>('COLOR');
   const [isUploading, setIsUploading] = useState<boolean>(false);
+
+  const [preferredMode, setPreferredMode] = useState<'mode_a' | 'mode_b' | 'mode_c'>(() => {
+    return (localStorage.getItem('pocketprint_preferred_mode') as any) || 'mode_a';
+  });
+
+  const handleSwitchMode = (newMode: 'mode_a' | 'mode_b' | 'mode_c') => {
+    setPreferredMode(newMode);
+    localStorage.setItem('pocketprint_preferred_mode', newMode);
+    toast.info(
+      newMode === 'mode_a'
+        ? 'Switched dashboard focus to Mode A (Windows Laptop Gateway)'
+        : newMode === 'mode_b'
+        ? 'Switched dashboard focus to Mode B (Android Phone Gateway)'
+        : 'Switched dashboard focus to Mode C (Paired Gateway / Cloud Direct)',
+      'Gateway Focus Updated'
+    );
+  };
 
   const windowsGateways = devices.filter((d) => d.gatewayType === 'WINDOWS_HOST');
   const androidGateways = devices.filter((d) => d.gatewayType === 'ANDROID_USB' || (!d.gatewayType && !d.name.includes('Windows')));
@@ -138,6 +156,106 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </Button>
         </div>
       </div>
+
+      {/* Mode Switcher Bar */}
+      <div className="p-3 sm:p-4 rounded-2xl bg-neutral-900/80 border border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Radio className="w-4 h-4 text-emerald-400 animate-pulse shrink-0" />
+          <span className="text-xs font-bold text-white">Active Gateway Focus:</span>
+          <span className="text-xs text-gray-400">
+            {preferredMode === 'mode_a'
+              ? 'Mode A (Windows Laptop)'
+              : preferredMode === 'mode_b'
+              ? 'Mode B (Android Phone)'
+              : 'Mode C (Cloud Paired)'}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => handleSwitchMode('mode_a')}
+            className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              preferredMode === 'mode_a'
+                ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm'
+                : 'bg-white/5 text-gray-400 hover:text-white border border-transparent'
+            }`}
+          >
+            <Laptop className="w-3.5 h-3.5" />
+            <span>Mode A: Windows</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSwitchMode('mode_b')}
+            className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              preferredMode === 'mode_b'
+                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
+                : 'bg-white/5 text-gray-400 hover:text-white border border-transparent'
+            }`}
+          >
+            <Smartphone className="w-3.5 h-3.5" />
+            <span>Mode B: Android</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSwitchMode('mode_c')}
+            className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              preferredMode === 'mode_c'
+                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-sm'
+                : 'bg-white/5 text-gray-400 hover:text-white border border-transparent'
+            }`}
+          >
+            <QrCode className="w-3.5 h-3.5" />
+            <span>Mode C: Cloud</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Dynamic Mode Guidance Banner */}
+      {preferredMode === 'mode_a' && (
+        <div className="p-4 rounded-xl bg-sky-950/30 border border-sky-800/40 flex items-start gap-3 text-xs">
+          <Laptop className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <div className="font-bold text-white flex items-center gap-2">
+              <span>Mode A Setup Guide: Windows Laptop USB Gateway</span>
+              <span className="text-[10px] px-2 py-0.5 bg-sky-500/20 text-sky-300 rounded font-mono font-semibold">USB001</span>
+            </div>
+            <p className="text-gray-300 leading-relaxed">
+              Connect your Canon PIXMA MG2570S to this Windows Laptop via USB cable. Run{' '}
+              <code className="text-sky-300 bg-black/40 px-1.5 py-0.5 rounded font-mono">npm run agent</code> in the backend folder. The agent hooks into the Canon Windows driver and receives remote print jobs from Cloud Relay.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {preferredMode === 'mode_b' && (
+        <div className="p-4 rounded-xl bg-emerald-950/30 border border-emerald-800/40 flex items-start gap-3 text-xs">
+          <Smartphone className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <div className="font-bold text-white flex items-center gap-2">
+              <span>Mode B Setup Guide: Android Phone USB OTG Gateway</span>
+              <span className="text-[10px] px-2 py-0.5 bg-emerald-500/20 text-emerald-300 rounded font-mono font-semibold">USB OTG Host</span>
+            </div>
+            <p className="text-gray-300 leading-relaxed">
+              Connect your Canon PIXMA MG2570S to an Android phone using a USB OTG adapter. Open the PocketPrint Android app and grant USB permissions (VID 0x04A9, PID 0x176D). The Android app translates incoming PDF print jobs to Canon BJL raster bytes and sends them directly to bulk endpoints.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {preferredMode === 'mode_c' && (
+        <div className="p-4 rounded-xl bg-purple-950/30 border border-purple-800/40 flex items-start gap-3 text-xs">
+          <QrCode className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <div className="font-bold text-white flex items-center gap-2">
+              <span>Mode C Setup Guide: Existing Paired Gateway / Cloud Direct</span>
+              <span className="text-[10px] px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded font-mono font-semibold">Cloud Direct</span>
+            </div>
+            <p className="text-gray-300 leading-relaxed">
+              You are connected directly to your printer workspace over the cloud. Print jobs submitted from this device will be routed through Cloud Relay to your active Windows or Android gateway. To pair an additional laptop or smartphone, share your 8-digit PIN code.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Top Metrics Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
