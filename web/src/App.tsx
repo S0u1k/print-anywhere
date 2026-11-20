@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider, useToast } from './components/ui/Toast';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { api } from './services/api';
 import { Device, Printer as PrinterType, PrintJob } from './types';
 import {
@@ -1095,10 +1096,12 @@ function MainApp() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ToastProvider>
-        <MainApp />
-      </ToastProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <ToastProvider>
+          <MainApp />
+        </ToastProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
