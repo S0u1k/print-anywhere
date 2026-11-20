@@ -64,3 +64,6 @@ android/app/build/
 android/build/
 android/.gradle/
 local.properties
+
+.vercel
+.env*
