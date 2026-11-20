@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Canon PIXMA MG2500 Series / MG2570S: VID 0x04A9 (1193), PID 0x176D (5997) -->
+    <usb-device vendor-id="1193" product-id="5997" />
+    <!-- Standard USB Printer Class: Class 7, Subclass 1, Protocol 2 -->
+    <usb-device class="7" subclass="1" protocol="2" />
+    <usb-device class="7" subclass="1" protocol="1" />
+    <usb-device class="7" />
+</resources>

@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark" />
+  <title>Iris — Smart AI Assistant</title>
+
+  <!-- Google Fonts: Figtree -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Import map (Three.js r169 from jsDelivr) -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <style>
+    :root {
+      --bg: #0b0b11;
+      --nav: #12131a;
+      --line: rgba(255, 255, 255, 0.06);
+      --text: #fff;
+      --muted: #a3a3b2;
+      --link: #c8c8d4;
+      --violet: #7c4dff;
+      --violet-2: #8f66ff;
+      --nav-h: 62px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    body {
+      font-family: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    /* NAV */
+    .nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 20;
+      height: var(--nav-h);
+      background: rgba(18, 19, 26, 0.86);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .nav-inner {
+      max-width: 1344px;
+      height: 100%;
+      margin: 0 auto;
+      padding: 0 68px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: relative;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      font-weight: 600;
+      font-size: 21px;
+      letter-spacing: -0.01em;
+    }
+
+    .brand-orb {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 32% 28%, #c9b8ff 0%, #8b6cff 38%, #5b3df0 72%, #3a24b8 100%);
+      box-shadow: 0 0 14px rgba(124, 77, 255, 0.55), inset -2px -3px 6px rgba(20, 8, 70, 0.55);
+      flex-shrink: 0;
+    }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 30px;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 38px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--link);
+    }
+
+    .nav-links a {
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover {
+      color: #fff;
+    }
+
+    .btn-open {
+      background: #fff;
+      color: #0b0b11;
+      font-weight: 600;
+      font-size: 14px;
+      padding: 10px 19px;
+      border-radius: 999px;
+      transition: transform 0.2s, box-shadow 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-open:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(255, 255, 255, 0.15);
+    }
+
+    .menu-btn {
+      display: none;
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--line);
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      padding: 0;
+      outline: none;
+    }
+
+    .menu-btn span {
+      display: block;
+      width: 16px;
+      height: 1.6px;
+      background: #fff;
+      border-radius: 2px;
+      position: relative;
+      transition: background 0.2s ease;
+    }
+
+    .menu-btn span::before,
+    .menu-btn span::after {
+      content: "";
+      display: block;
+      width: 16px;
+      height: 1.6px;
+      background: #fff;
+      border-radius: 2px;
+      position: absolute;
+      left: 0;
+      transition: transform 0.25s ease, top 0.25s ease;
+    }
+
+    .menu-btn span::before {
+      top: -5px;
+    }
+
+    .menu-btn span::after {
+      top: 5px;
+    }
+
+    .nav.open .menu-btn span {
+      background: transparent;
+    }
+
+    .nav.open .menu-btn span::before {
+      top: 0;
+      transform: rotate(45deg);
+    }
+
+    .nav.open .menu-btn span::after {
+      top: 0;
+      transform: rotate(-45deg);
+    }
+
+    .mobile-panel {
+      display: none;
+      position: absolute;
+      top: calc(var(--nav-h) + 8px);
+      left: 16px;
+      right: 16px;
+      background: rgba(20, 21, 30, 0.96);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 8px;
+      flex-direction: column;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+
+    .mobile-panel a {
+      padding: 14px 16px;
+      border-radius: 12px;
+      font-weight: 500;
+      color: var(--link);
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .mobile-panel a:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+    }
+
+    .nav.open .mobile-panel {
+      display: flex;
+    }
+
+    /* HERO */
+    .hero {
+      position: relative;
+      min-height: 100vh;
+      min-height: 100svh;
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    #stage {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 0;
+      touch-action: pan-y;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background:
+        radial-gradient(120% 80% at 50% 0%, transparent 55%, rgba(0, 0, 0, 0.45) 100%),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.012) 0 1px, transparent 1px 7px);
+    }
+
+    .hero-inner {
+      position: relative;
+      z-index: 2;
+      pointer-events: none;
+      max-width: 1344px;
+      margin: 0 auto;
+      min-height: inherit;
+      padding: calc(var(--nav-h) + 40px) 68px 80px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .copy {
+      max-width: 600px;
+      pointer-events: auto;
+    }
+
+    h1 {
+      font-size: clamp(40px, 5.1vw, 70px);
+      line-height: 1.04;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+
+    .sub {
+      margin-top: 26px;
+      color: var(--muted);
+      font-size: clamp(17px, 1.65vw, 22px);
+      line-height: 1.55;
+      font-weight: 400;
+    }
+
+    .btn-try {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 36px;
+      height: 59px;
+      padding: 0 38px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, #8f66ff, #7c4dff);
+      color: #fff;
+      font-weight: 600;
+      font-size: 20px;
+      letter-spacing: -0.005em;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+      transition: transform 0.25s, filter 0.25s;
+    }
+
+    .btn-try:hover {
+      transform: translateY(-2px);
+      filter: brightness(1.08);
+    }
+
+    /* REVEAL ANIMATIONS */
+    .reveal {
+      opacity: 0;
+      transform: translateY(18px);
+      animation: rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+    }
+
+    .reveal.d1 {
+      animation-delay: 0.08s;
+    }
+
+    .reveal.d2 {
+      animation-delay: 0.2s;
+    }
+
+    .reveal.d3 {
+      animation-delay: 0.32s;
+    }
+
+    @keyframes rise {
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    /* LOADER */
+    .loader {
+      position: absolute;
+      z-index: 2;
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      border: 2px solid rgba(143, 102, 255, 0.18);
+      border-top-color: #8f66ff;
+      transform: translate(-50%, -50%);
+      animation: spin 1s linear infinite;
+      transition: opacity 0.5s;
+      pointer-events: none;
+    }
+
+    .loader.hide {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: translate(-50%, -50%) rotate(0deg);
+      }
+      100% {
+        transform: translate(-50%, -50%) rotate(360deg);
+      }
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 1100px) {
+      .nav-inner, .hero-inner {
+        padding-left: 40px;
+        padding-right: 40px;
+      }
+      .nav-links {
+        gap: 26px;
+      }
+    }
+
+    @media (max-width: 860px) {
+      .nav-links {
+        display: none;
+      }
+      .menu-btn {
+        display: inline-flex;
+      }
+      .nav-right {
+        gap: 10px;
+      }
+      .hero-inner {
+        justify-content: flex-end;
+        text-align: center;
+        align-items: center;
+        padding: calc(var(--nav-h) + 20px) 24px 56px;
+      }
+      .copy {
+        max-width: 560px;
+      }
+      h1 {
+        font-size: clamp(36px, 9.2vw, 56px);
+      }
+      .sub {
+        margin-top: 16px;
+      }
+      .btn-try {
+        margin-top: 26px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .nav-inner {
+        padding: 0 16px;
+      }
+      .hero-inner {
+        padding: calc(var(--nav-h) + 16px) 16px 40px;
+      }
+      .brand {
+        font-size: 19px;
+      }
+      .btn-open {
+        padding: 9px 15px;
+        font-size: 13px;
+      }
+      .btn-try {
+        height: 54px;
+        padding: 0 32px;
+        font-size: 18px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .reveal {
+        animation: none;
+        opacity: 1;
+        transform: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header / Navigation -->
+  <header class="nav" id="nav">
+    <div class="nav-inner">
+      <a class="brand" href="#"><span class="brand-orb"></span>Iris</a>
+      <div class="nav-right">
+        <nav class="nav-links">
+          <a href="#">Overview</a>
+          <a href="#">Ecosystem</a>
+          <a href="#">Socials</a>
+          <a href="#">Help</a>
+        </nav>
+        <a class="btn-open" href="#">Get Iris</a>
+        <button class="menu-btn" id="menuBtn" aria-label="Menu" aria-expanded="false"><span></span></button>
+      </div>
+      <div class="mobile-panel">
+        <a href="#">Overview</a>
+        <a href="#">Ecosystem</a>
+        <a href="#">Socials</a>
+        <a href="#">Help</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <main class="hero" id="hero">
+    <canvas id="stage" aria-hidden="true"></canvas>
+    <div class="loader" id="loader"></div>
+    <div class="hero-inner">
+      <div class="copy" id="copy">
+        <h1 class="reveal d1">Introducing a<br />Smart AI Assistant</h1>
+        <p class="sub reveal d2">Easy to start. Effortless to explore.<br />Capable in every conversation.</p>
+        <a class="btn-try reveal d3" href="#">Start free</a>
+      </div>
+    </div>
+  </main>
+
+  <!-- Interactive 3D Robot Mascot (Three.js Module) -->
+  <script type="module">
+    import * as THREE from "three";
+    import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+    import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+    import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+    import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+    import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+    import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
+
+    // 3D Model URLs
+    const HEAD_GLB = "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20261018_172206_0181329a-86e2-41c9-8ab8-c496f29aaa53.glb";
+    const ARM_GLB  = "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20261018_172137_cd6086ec-07ef-44dc-bd15-95a450ddaa8c.glb";
+
+    // UI Elements
+    const nav = document.getElementById("nav");
+    const menuBtn = document.getElementById("menuBtn");
+    const heroEl = document.getElementById("hero");
+    const copyEl = document.getElementById("copy");
+    const canvas = document.getElementById("stage");
+    const loaderEl = document.getElementById("loader");
+
+    // Menu toggle
+    menuBtn.addEventListener("click", () => {
+      const isOpen = nav.classList.toggle("open");
+      menuBtn.setAttribute("aria-expanded", String(isOpen));
+    });
+
+    // Close menu when mobile links are clicked
+    document.querySelectorAll(".mobile-panel a").forEach((a) => {
+      a.addEventListener("click", () => {
+        nav.classList.remove("open");
+        menuBtn.setAttribute("aria-expanded", "false");
+      });
+    });
+
+    // Helper: Radial Canvas Texture
+    function radialTexture(stops, size = 256) {
+      const c = document.createElement("canvas");
+      c.width = size;
+      c.height = size;
+      const ctx = c.getContext("2d");
+      const half = size / 2;
+      const grad = ctx.createRadialGradient(half, half, 0, half, half, half);
+      for (const [offset, color] of stops) {
+        grad.addColorStop(offset, color);
+      }
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, size, size);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    const glowTex = radialTexture([
+      [0, "rgba(160,120,255,1)"],
+      [0.25, "rgba(124,77,255,.55)"],
+      [0.6, "rgba(90,50,230,.12)"],
+      [1, "rgba(60,30,200,0)"]
+    ]);
+
+    // Three.js Scene Setup
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0b0b11);
+
+    const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
+
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      powerPreference: "high-performance"
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    // Environment: Dark studio with emissive spherical softboxes
+    const envScene = new THREE.Scene();
+    envScene.background = new THREE.Color("#030305");
+
+    const softboxGeom = new THREE.SphereGeometry(0.5, 32, 16);
+    const softboxes = [
+      { color: 0xffffff, intensity: 3.2, scale: [5, 3.2, 0.3], pos: [-3, 4.5, 4] },
+      { color: 0xffffff, intensity: 1.1, scale: [1.2, 6, 0.3], pos: [6, 0.5, 2] },
+      { color: 0xffffff, intensity: 0.8, scale: [3, 1, 0.3], pos: [1.5, 5, -1] },
+      { color: 0x7c4dff, intensity: 1.0, scale: [4, 5, 0.3], pos: [-5, 0, -4] },
+      { color: 0x7c4dff, intensity: 1.0, scale: [4, 5, 0.3], pos: [5, 0, -4] },
+      { color: 0x5b30ff, intensity: 0.35, scale: [6, 3, 0.3], pos: [0, -5, 1] }
+    ];
+
+    softboxes.forEach((box) => {
+      const mat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(box.color).multiplyScalar(box.intensity)
+      });
+      const mesh = new THREE.Mesh(softboxGeom, mat);
+      mesh.position.set(...box.pos);
+      mesh.scale.set(...box.scale);
+      mesh.lookAt(0, 0, 0);
+      envScene.add(mesh);
+    });
+
+    const pmremGen = new THREE.PMREMGenerator(renderer);
+    pmremGen.compileEquirectangularShader();
+    const envTexture = pmremGen.fromScene(envScene, 0.02).texture;
+    scene.environment = envTexture;
+    scene.environmentIntensity = 1.0;
+
+    // Direct Lights
+    const hemiLight = new THREE.HemisphereLight(0xdcd8f0, 0x1a0f3a, 2.3);
+    scene.add(hemiLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.55);
+    dirLight.position.set(-3, 4, 5);
+    scene.add(dirLight);
+
+    // Post-Processing
+    const composer = new EffectComposer(renderer);
+    const renderPass = new RenderPass(scene, camera);
+    composer.addPass(renderPass);
+
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.55, 0.4, 0.92);
+    composer.addPass(bloomPass);
+
+    const outputPass = new OutputPass();
+    composer.addPass(outputPass);
+
+    // Fresnel Rim Shader
+    function rimMaterial(color, power, strength) {
+      const threeColor = color instanceof THREE.Color ? color : new THREE.Color(color);
+      return new THREE.ShaderMaterial({
+        uniforms: {
+          uColor: { value: threeColor },
+          uPower: { value: power },
+          uStrength: { value: strength }
+        },
+        vertexShader: `
+          varying vec3 vNormal;
+          varying vec3 vViewDir;
+          void main() {
+            vNormal = normalize(normalMatrix * normal);
+            vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+            vViewDir = normalize(-mvPos.xyz);
+            gl_Position = projectionMatrix * mvPos;
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 uColor;
+          uniform float uPower;
+          uniform float uStrength;
+          varying vec3 vNormal;
+          varying vec3 vViewDir;
+          void main() {
+            vec3 N = normalize(vNormal);
+            vec3 V = normalize(vViewDir);
+            float f = pow(1.0 - max(dot(N, V), 0.0), uPower);
+            gl_FragColor = vec4(uColor * f * uStrength, f);
+          }
+        `,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+    }
+
+    // Rig Hierarchy: robot -> body -> head
+    const robot = new THREE.Group();
+    const body = new THREE.Group();
+    const head = new THREE.Group();
+
+    robot.add(body);
+    body.add(head);
+    scene.add(robot);
+
+    // Background Haze Sprite
+    const bgHazeMat = new THREE.SpriteMaterial({
+      map: glowTex,
+      color: 0x7a55ff,
+      opacity: 0.06,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+      depthWrite: false
+    });
+    const bgHaze = new THREE.Sprite(bgHazeMat);
+    bgHaze.scale.set(7.5, 7.5, 1);
+    bgHaze.position.set(0, 0.1, -3);
+    scene.add(bgHaze);
+
+    // Floor Glow Plane (facing camera, not flat)
+    const floorGlowMat = new THREE.MeshBasicMaterial({
+      map: glowTex,
+      color: 0x8f6bff,
+      opacity: 0.95,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    const floorGlow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), floorGlowMat);
+    floorGlow.position.set(0, -2.05, -0.6);
+    floorGlow.scale.set(3.4, 0.42, 1);
+    scene.add(floorGlow);
+
+    // State & Tracking variables
+    let arms = [];
+    const eyeGroups = [];
+    const pupilWraps = [];
+    const antennaGlowSprites = [];
+
+    // Model Prep Utility
+    function prepareModel(root, { glossy, rim, tint, useMap, smooth }) {
+      const meshes = [];
+      root.traverse((child) => {
+        if (child.isMesh) meshes.push(child);
+      });
+
+      for (const mesh of meshes) {
+        if (smooth) {
+          const g = mesh.geometry.clone();
+          g.deleteAttribute("normal");
+          g.deleteAttribute("uv");
+          g.deleteAttribute("uv1");
+          g.deleteAttribute("tangent");
+          g.deleteAttribute("color");
+          const merged = mergeVertices(g, 1e-3);
+          merged.computeVertexNormals();
+          mesh.geometry = merged;
+        }
+
+        const origMat = mesh.material;
+        const matProps = {
+          color: new THREE.Color(tint),
+          map: useMap && origMat && origMat.map ? origMat.map : null,
+          metalness: glossy ? 0.1 : 0.0,
+          roughness: glossy ? 0.3 : 0.48,
+          clearcoat: glossy ? 1.0 : 0.3,
+          clearcoatRoughness: glossy ? 0.16 : 0.4,
+          envMapIntensity: glossy ? 0.9 : 0.55
+        };
+        mesh.material = new THREE.MeshPhysicalMaterial(matProps);
+
+        if (rim) {
+          const shell = new THREE.Mesh(mesh.geometry, rimMaterial(rim.color, rim.power, rim.strength));
+          shell.renderOrder = 2;
+          mesh.add(shell);
+        }
+      }
+    }
+
+    // Head Normalisation
+    function normaliseHead(root) {
+      const box = new THREE.Box3().setFromObject(root);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const scale = 2 / (size.z || 1);
+      root.scale.setScalar(scale);
+
+      root.updateMatrixWorld(true);
+      const scaledBox = new THREE.Box3().setFromObject(root);
+      const centre = new THREE.Vector3();
+      scaledBox.getCenter(centre);
+
+      root.position.set(-centre.x, -(scaledBox.min.y + 1), -centre.z);
+      root.updateMatrixWorld(true);
+    }
+
+    // Arm Normalisation
+    function normaliseArm(rawArm) {
+      const armGroup = new THREE.Group();
+      const box = new THREE.Box3().setFromObject(rawArm);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const scale = 0.78 / (size.y || 1);
+      rawArm.scale.setScalar(scale);
+
+      rawArm.updateMatrixWorld(true);
+      const scaledBox = new THREE.Box3().setFromObject(rawArm);
+      const centre = new THREE.Vector3();
+      scaledBox.getCenter(centre);
+
+      rawArm.position.set(-centre.x, -centre.y, -centre.z);
+      armGroup.add(rawArm);
+      return armGroup;
+    }
+
+    // Visor Geometry Builder (Rounded-Rect tessellated + subdivided + wrapped onto sphere)
+    function createVisorGeometry(w, h, corner, centerY, radius) {
+      const shape = new THREE.Shape();
+      const x0 = -w / 2;
+      const y0 = centerY - h / 2;
+      shape.moveTo(x0 + corner, y0);
+      shape.lineTo(x0 + w - corner, y0);
+      shape.quadraticCurveTo(x0 + w, y0, x0 + w, y0 + corner);
+      shape.lineTo(x0 + w, y0 + h - corner);
+      shape.quadraticCurveTo(x0 + w, y0 + h, x0 + w - corner, y0 + h);
+      shape.lineTo(x0 + corner, y0 + h);
+      shape.quadraticCurveTo(x0, y0 + h, x0, y0 + h - corner);
+      shape.lineTo(x0, y0 + corner);
+      shape.quadraticCurveTo(x0, y0, x0 + corner, y0);
+
+      let geom = new THREE.ShapeGeometry(shape, 48);
+      if (geom.index) geom = geom.toNonIndexed();
+
+      // 3 rounds of 4-way midpoint subdivision
+      for (let r = 0; r < 3; r++) {
+        const pos = geom.attributes.position;
+        const count = pos.count;
+        const newPositions = new Float32Array(count * 4 * 3);
+        let ptr = 0;
+
+        for (let i = 0; i < count; i += 3) {
+          const ax = pos.getX(i), ay = pos.getY(i);
+          const bx = pos.getX(i + 1), by = pos.getY(i + 1);
+          const cx = pos.getX(i + 2), cy = pos.getY(i + 2);
+
+          const abx = (ax + bx) * 0.5, aby = (ay + by) * 0.5;
+          const bcx = (bx + cx) * 0.5, bcy = (by + cy) * 0.5;
+          const cax = (cx + ax) * 0.5, cay = (cy + ay) * 0.5;
+
+          // Tri 1: A, AB, CA
+          newPositions[ptr++] = ax;  newPositions[ptr++] = ay;  newPositions[ptr++] = 0;
+          newPositions[ptr++] = abx; newPositions[ptr++] = aby; newPositions[ptr++] = 0;
+          newPositions[ptr++] = cax; newPositions[ptr++] = cay; newPositions[ptr++] = 0;
+
+          // Tri 2: AB, B, BC
+          newPositions[ptr++] = abx; newPositions[ptr++] = aby; newPositions[ptr++] = 0;
+          newPositions[ptr++] = bx;  newPositions[ptr++] = by;  newPositions[ptr++] = 0;
+          newPositions[ptr++] = bcx; newPositions[ptr++] = bcy; newPositions[ptr++] = 0;
+
+          // Tri 3: BC, C, CA
+          newPositions[ptr++] = bcx; newPositions[ptr++] = bcy; newPositions[ptr++] = 0;
+          newPositions[ptr++] = cx;  newPositions[ptr++] = cy;  newPositions[ptr++] = 0;
+          newPositions[ptr++] = cax; newPositions[ptr++] = cay; newPositions[ptr++] = 0;
+
+          // Tri 4: AB, BC, CA
+          newPositions[ptr++] = abx; newPositions[ptr++] = aby; newPositions[ptr++] = 0;
+          newPositions[ptr++] = bcx; newPositions[ptr++] = bcy; newPositions[ptr++] = 0;
+          newPositions[ptr++] = cax; newPositions[ptr++] = cay; newPositions[ptr++] = 0;
+        }
+
+        geom.dispose();
+        geom = new THREE.BufferGeometry();
+        geom.setAttribute("position", new THREE.BufferAttribute(newPositions, 3));
+      }
+
+      // Wrap onto sphere: z = sqrt(radius² - x² - y²); normals = normalised positions
+      const pos = geom.attributes.position;
+      const count = pos.count;
+      const normals = new Float32Array(count * 3);
+      const r2 = radius * radius;
+
+      for (let i = 0; i < count; i++) {
+        const x = pos.getX(i);
+        const y = pos.getY(i);
+        const d2 = x * x + y * y;
+        const z = Math.sqrt(Math.max(0, r2 - d2));
+        pos.setXYZ(i, x, y, z);
+
+        const len = Math.hypot(x, y, z) || 1;
+        normals[i * 3] = x / len;
+        normals[i * 3 + 1] = y / len;
+        normals[i * 3 + 2] = z / len;
+      }
+
+      geom.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
+      return geom;
+    }
+
+    // Mount Head Visor, Eyes, Antenna Balls & Smooth Sphere Normals
+    function mountHead(headModel) {
+      head.updateMatrixWorld(true);
+
+      // a) Raycast from (0,0,5) toward -Z to find sphere radius R
+      const raycaster = new THREE.Raycaster(new THREE.Vector3(0, 0, 5), new THREE.Vector3(0, 0, -1));
+      const hits = raycaster.intersectObject(headModel, true);
+      let R = 1.0;
+      if (hits.length > 0) {
+        R = THREE.MathUtils.clamp(hits[0].point.length(), 0.85, 1.1);
+      }
+
+      // b) sphereNormals: smooth reflections on spherical portion of head
+      head.traverse((child) => {
+        if (child.isMesh && child.geometry && child.geometry.attributes.position && child.geometry.attributes.normal) {
+          const posAttr = child.geometry.attributes.position;
+          const normAttr = child.geometry.attributes.normal;
+          child.updateMatrixWorld(true);
+          const toHead = new THREE.Matrix4().copy(head.matrixWorld).invert().multiply(child.matrixWorld);
+          const normalMat = new THREE.Matrix3().getNormalMatrix(toHead);
+          const normalMatInv = normalMat.clone().invert();
+
+          let updated = false;
+          for (let i = 0; i < posAttr.count; i++) {
+            const pos = new THREE.Vector3().fromBufferAttribute(posAttr, i);
+            const vHead = pos.clone().applyMatrix4(toHead);
+            const dist = vHead.length();
+            if (Math.abs(dist - R) <= R * 0.07) {
+              const normHead = vHead.clone().normalize();
+              const normMesh = normHead.applyMatrix3(normalMatInv).normalize();
+              normAttr.setXYZ(i, normMesh.x, normMesh.y, normMesh.z);
+              updated = true;
+            }
+          }
+          if (updated) {
+            normAttr.needsUpdate = true;
+          }
+        }
+      });
+
+      // c) addVisor(R): bezel & glass
+      const bezelGeom = createVisorGeometry(1.86, 1.12, 0.46, -0.07, R * 1.03);
+      const bezelMat = new THREE.MeshPhysicalMaterial({
+        color: 0x0c0c10,
+        roughness: 0.3,
+        metalness: 0.3,
+        clearcoat: 0.8,
+        polygonOffset: true,
+        polygonOffsetFactor: -6,
+        polygonOffsetUnits: -6
+      });
+      const bezelMesh = new THREE.Mesh(bezelGeom, bezelMat);
+      bezelMesh.renderOrder = 3;
+      head.add(bezelMesh);
+
+      const glassGeom = createVisorGeometry(1.74, 1.0, 0.4, -0.07, R * 1.036);
+      const glassMat = new THREE.MeshPhysicalMaterial({
+        color: 0x000000,
+        roughness: 0.12,
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.1,
+        envMapIntensity: 0.9,
+        polygonOffset: true,
+        polygonOffsetFactor: -8,
+        polygonOffsetUnits: -8
+      });
+      const glassMesh = new THREE.Mesh(glassGeom, glassMat);
+      glassMesh.renderOrder = 4;
+      head.add(glassMesh);
+
+      // d) Eyes (procedural for tracking)
+      const eyeXCoords = [-0.43, 0.43];
+      const eyeY = -0.08;
+      const rEye = R * 1.055;
+      const irisMap = radialTexture([
+        [0, "#d7c9ff"],
+        [0.45, "#a07bff"],
+        [0.8, "#7646f2"],
+        [1, "#5c2fe0"]
+      ]);
+
+      for (const eyeX of eyeXCoords) {
+        const eyeZ = Math.sqrt(Math.max(0, rEye * rEye - eyeX * eyeX - eyeY * eyeY));
+        const eyePos = new THREE.Vector3(eyeX, eyeY, eyeZ);
+        const eyeGroup = new THREE.Group();
+        eyeGroup.position.copy(eyePos);
+        eyeGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), eyePos.clone().normalize());
+
+        // Halo
+        const haloMat = new THREE.MeshBasicMaterial({
+          map: glowTex,
+          color: 0x8a5cff,
+          opacity: 0.24,
+          transparent: true,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+          depthWrite: false,
+          depthTest: false
+        });
+        const halo = new THREE.Mesh(new THREE.CircleGeometry(0.42, 32), haloMat);
+        halo.position.z = -0.004;
+        halo.renderOrder = 9;
+
+        // Ring
+        const ringMat = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(1.1, 0.88, 2.0),
+          transparent: true,
+          toneMapped: false,
+          depthWrite: false,
+          depthTest: false
+        });
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.168, 0.212, 64), ringMat);
+        ring.renderOrder = 10;
+
+        // Iris
+        const irisMat = new THREE.MeshBasicMaterial({
+          map: irisMap,
+          color: new THREE.Color(1.0, 0.95, 1.15),
+          transparent: true,
+          toneMapped: false,
+          depthWrite: false,
+          depthTest: false
+        });
+        const iris = new THREE.Mesh(new THREE.CircleGeometry(0.17, 32), irisMat);
+        iris.position.z = 0.001;
+        iris.renderOrder = 10;
+
+        // Pupil Wrap (cursor following group)
+        const pupilWrap = new THREE.Group();
+        const pupilMat = new THREE.MeshBasicMaterial({
+          color: 0x07040f,
+          transparent: true,
+          toneMapped: false,
+          depthWrite: false,
+          depthTest: false
+        });
+        const pupil = new THREE.Mesh(new THREE.CircleGeometry(0.083, 32), pupilMat);
+        pupil.position.z = 0.003;
+        pupil.renderOrder = 10;
+
+        const glintMat = new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          transparent: true,
+          toneMapped: false,
+          depthWrite: false,
+          depthTest: false
+        });
+        const glint = new THREE.Mesh(new THREE.CircleGeometry(0.022, 24), glintMat);
+        glint.position.set(0.032, 0.034, 0.005);
+        glint.renderOrder = 10;
+
+        pupilWrap.add(pupil, glint);
+        eyeGroup.add(halo, ring, iris, pupilWrap);
+        head.add(eyeGroup);
+
+        eyeGroups.push(eyeGroup);
+        pupilWraps.push(pupilWrap);
+      }
+
+      // e) Antenna Balls
+      const leftVerts = [];
+      const rightVerts = [];
+      head.updateMatrixWorld(true);
+
+      head.traverse((child) => {
+        if (child.isMesh && child.geometry && child.geometry.attributes.position && child !== bezelMesh && child !== glassMesh) {
+          const posAttr = child.geometry.attributes.position;
+          const toHead = new THREE.Matrix4().copy(head.matrixWorld).invert().multiply(child.matrixWorld);
+          for (let i = 0; i < posAttr.count; i++) {
+            const v = new THREE.Vector3().fromBufferAttribute(posAttr, i).applyMatrix4(toHead);
+            if (v.y > 0.75) {
+              if (v.x < -0.15) leftVerts.push(v);
+              else if (v.x > 0.15) rightVerts.push(v);
+            }
+          }
+        }
+      });
+
+      function getAntennaCenter(verts, defaultPos) {
+        if (!verts || verts.length === 0) return defaultPos.clone();
+        let top = verts[0];
+        for (const p of verts) {
+          if (p.y > top.y) top = p;
+        }
+        const nearby = verts.filter((p) => p.distanceTo(top) <= 0.2);
+        if (nearby.length === 0) return defaultPos.clone();
+        const avg = new THREE.Vector3();
+        for (const p of nearby) avg.add(p);
+        avg.divideScalar(nearby.length);
+        if (avg.y < top.y - 0.1) avg.y = top.y - 0.1;
+        return avg;
+      }
+
+      const leftCenter = getAntennaCenter(leftVerts, new THREE.Vector3(-0.55, 1.18, 0));
+      const rightCenter = getAntennaCenter(rightVerts, new THREE.Vector3(0.55, 1.18, 0));
+
+      const ballGeom = new THREE.SphereGeometry(0.118, 32, 16);
+      const ballMat = new THREE.MeshPhysicalMaterial({
+        color: 0x8b62ff,
+        emissive: 0x6a3dff,
+        emissiveIntensity: 1.5,
+        roughness: 0.22,
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.14
+      });
+
+      for (const center of [leftCenter, rightCenter]) {
+        const ball = new THREE.Mesh(ballGeom, ballMat);
+        ball.position.copy(center);
+        head.add(ball);
+
+        const glowSpriteMat = new THREE.SpriteMaterial({
+          map: glowTex,
+          color: 0x9a6bff,
+          opacity: 0.85,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+          depthWrite: false
+        });
+        const glowSprite = new THREE.Sprite(glowSpriteMat);
+        glowSprite.scale.set(0.5, 0.5, 1);
+        glowSprite.position.copy(center);
+        head.add(glowSprite);
+        antennaGlowSprites.push(glowSprite);
+      }
+    }
+
+    // Procedural Fallbacks (if GLB network fails)
+    function createFallbackHeadMesh() {
+      const root = new THREE.Group();
+      const sphereGeom = new THREE.SphereGeometry(1, 48, 32);
+      const sphereMat = new THREE.MeshPhysicalMaterial({
+        color: 0x2c2c35,
+        roughness: 0.26,
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.16,
+        metalness: 0.1,
+        envMapIntensity: 0.9
+      });
+      const sphereMesh = new THREE.Mesh(sphereGeom, sphereMat);
+      root.add(sphereMesh);
+
+      // Ear caps
+      const earGeom = new THREE.CylinderGeometry(0.26, 0.26, 0.2, 32);
+      const earMat = sphereMat.clone();
+      const leftEar = new THREE.Mesh(earGeom, earMat);
+      leftEar.rotation.z = Math.PI / 2;
+      leftEar.position.set(-1.02, 0, 0);
+
+      const rightEar = new THREE.Mesh(earGeom, earMat);
+      rightEar.rotation.z = -Math.PI / 2;
+      rightEar.position.set(1.02, 0, 0);
+      root.add(leftEar, rightEar);
+
+      // Antenna rods
+      const rodGeom = new THREE.CylinderGeometry(0.022, 0.022, 0.42, 16);
+      const rodMat = new THREE.MeshPhysicalMaterial({ color: 0x1d1d23, roughness: 0.48, metalness: 0.3 });
+      const leftRod = new THREE.Mesh(rodGeom, rodMat);
+      leftRod.position.set(-0.52, 1.05, 0);
+      leftRod.rotation.z = 0.25;
+
+      const rightRod = new THREE.Mesh(rodGeom, rodMat);
+      rightRod.position.set(0.52, 1.05, 0);
+      rightRod.rotation.z = -0.25;
+      root.add(leftRod, rightRod);
+
+      // Rim shells
+      const rimShellMat = rimMaterial(0x8a5cff, 4.5, 0.32);
+      sphereMesh.add(new THREE.Mesh(sphereGeom, rimShellMat));
+      leftEar.add(new THREE.Mesh(earGeom, rimShellMat));
+      rightEar.add(new THREE.Mesh(earGeom, rimShellMat));
+
+      return root;
+    }
+
+    function createFallbackArmMesh() {
+      const root = new THREE.Group();
+      const geom = new THREE.CapsuleGeometry(0.22, 0.42, 16, 32);
+      const mat = new THREE.MeshPhysicalMaterial({
+        color: 0x1b1b21,
+        roughness: 0.48,
+        clearcoat: 0.3,
+        clearcoatRoughness: 0.4,
+        metalness: 0.0,
+        envMapIntensity: 0.55
+      });
+      const mesh = new THREE.Mesh(geom, mat);
+      const rimShell = new THREE.Mesh(geom, rimMaterial(0x8a5cff, 2.6, 1.05));
+      mesh.add(rimShell);
+      root.add(mesh);
+      return root;
+    }
+
+    // Layout & Sizing
+    let currentAnchor = { x: 0, y: 0 };
+    let currentRobotPx = 400;
+
+    function layout() {
+      const W = heroEl.clientWidth;
+      const H = heroEl.clientHeight;
+      if (!W || !H) return;
+
+      const isMobile = W <= 860;
+      renderer.setSize(W, H);
+      composer.setSize(W, H);
+      bloomPass.setSize(W, H);
+
+      let robotPx, anchor;
+      if (!isMobile) {
+        robotPx = Math.min(H * 0.62, W * 0.4, 640);
+        anchor = { x: W * 0.695, y: H * 0.5 + 8 };
+      } else {
+        const copyRect = copyEl.getBoundingClientRect();
+        const heroRect = heroEl.getBoundingClientRect();
+        const copyTop = copyRect.top - heroRect.top;
+        const room = Math.max(copyTop - 62, 220);
+        robotPx = Math.min(room * 0.92, W * 0.82);
+        anchor = { x: W / 2, y: 62 + room * 0.5 };
+      }
+
+      currentAnchor = anchor;
+      currentRobotPx = robotPx;
+
+      const fovRad = (camera.fov * Math.PI) / 180;
+      camera.position.z = (3.4 * H) / (robotPx * 2 * Math.tan(fovRad / 2));
+      camera.setViewOffset(W, H, W / 2 - anchor.x, H / 2 - anchor.y, W, H);
+      camera.aspect = W / H;
+      camera.updateProjectionMatrix();
+
+      loaderEl.style.left = anchor.x + "px";
+      loaderEl.style.top = anchor.y + "px";
+    }
+
+    const resizeObserver = new ResizeObserver(() => layout());
+    resizeObserver.observe(heroEl);
+    layout();
+
+    // Interaction & Animation Setup
+    const target = { x: 0, y: 0 };
+    const look = { x: 0, y: 0 };
+    let lastMoveTime = performance.now();
+    let introProg = 0;
+    let introStarted = false;
+
+    function onPointer(e) {
+      const W = heroEl.clientWidth;
+      const H = heroEl.clientHeight;
+      const isMobile = W <= 860;
+
+      let clientX, clientY;
+      if (e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+      } else {
+        clientX = e.clientX;
+        clientY = e.clientY;
+      }
+
+      const rx = isMobile ? W * 0.5 : Math.max(W * 0.55, 500);
+      const ry = isMobile ? H * 0.5 : Math.max(H * 0.55, 400);
+
+      target.x = THREE.MathUtils.clamp((clientX - currentAnchor.x) / rx, -1.2, 1.2);
+      target.y = THREE.MathUtils.clamp((clientY - currentAnchor.y) / ry, -1.2, 1.2);
+      lastMoveTime = performance.now();
+    }
+
+    window.addEventListener("pointermove", onPointer, { passive: true });
+    window.addEventListener("pointerdown", onPointer, { passive: true });
+    window.addEventListener("touchmove", onPointer, { passive: true });
+
+    // Blink state
+    let isBlinking = false;
+    let blinkStartTime = 0;
+    let nextBlinkTime = performance.now() + 3000;
+
+    // Load Models (with graceful fallback)
+    const gltfLoader = new GLTFLoader();
+    const loadGLB = (url) =>
+      new Promise((resolve, reject) => {
+        gltfLoader.load(url, (gltf) => resolve(gltf.scene), undefined, reject);
+      });
+
+    Promise.allSettled([loadGLB(HEAD_GLB), loadGLB(ARM_GLB)]).then(([headRes, armRes]) => {
+      let headModel = headRes.status === "fulfilled" ? headRes.value : createFallbackHeadMesh();
+      let armModel = armRes.status === "fulfilled" ? armRes.value : createFallbackArmMesh();
+
+      if (headRes.status === "fulfilled") {
+        normaliseHead(headModel);
+        prepareModel(headModel, {
+          glossy: true,
+          useMap: false,
+          tint: "#4a4a56",
+          rim: { color: 0x8a5cff, power: 4.5, strength: 0.32 }
+        });
+      }
+      head.add(headModel);
+      mountHead(headModel);
+
+      // Arms: prepare model BEFORE normalising, clone BEFORE normalising
+      if (armRes.status === "fulfilled") {
+        prepareModel(armModel, {
+          glossy: false,
+          useMap: false,
+          smooth: true,
+          tint: "#1d1d23",
+          rim: { color: 0x8a5cff, power: 2.6, strength: 1.05 }
+        });
+      }
+
+      const armLeftRaw = armModel;
+      const armRightRaw = armModel.clone(true);
+
+      const leftArmGroup = normaliseArm(armLeftRaw);
+      leftArmGroup.position.set(-1.32, -0.72, 0.15);
+      leftArmGroup.rotation.z = -0.62;
+      body.add(leftArmGroup);
+
+      const rightArmGroup = normaliseArm(armRightRaw);
+      rightArmGroup.position.set(1.32, -0.72, 0.15);
+      rightArmGroup.rotation.z = 0.62;
+      body.add(rightArmGroup);
+
+      arms = [
+        { group: leftArmGroup, restX: -1.32, restY: -0.72, restRz: -0.62, phase: 0 },
+        { group: rightArmGroup, restX: 1.32, restY: -0.72, restRz: 0.62, phase: Math.PI * 0.85 }
+      ];
+
+      // Hide Loader & Start Intro
+      loaderEl.classList.add("hide");
+      robot.scale.setScalar(0.001);
+      introStarted = true;
+    });
+
+    // Visibility observer to pause rendering when off-screen
+    let isVisible = true;
+    const observer = new IntersectionObserver(([entry]) => {
+      isVisible = entry.isIntersecting;
+    });
+    observer.observe(heroEl);
+
+    // Animation Loop
+    let lastTime = performance.now();
+
+    function animate(now) {
+      requestAnimationFrame(animate);
+
+      const deltaTime = (now - lastTime) / 1000;
+      lastTime = now;
+      const dt = Math.min(deltaTime, 0.05);
+      const t = now * 0.001;
+
+      // Idle look-around if no pointer move for 3.5s
+      if (now - lastMoveTime > 3500) {
+        target.x = Math.sin(t * 0.45) * 0.45;
+        target.y = Math.sin(t * 0.31 + 1.2) * 0.2;
+      }
+
+      // Smooth look interpolator
+      look.x += (target.x - look.x) * (1 - Math.pow(0.0025, dt));
+      look.y += (target.y - look.y) * (1 - Math.pow(0.0025, dt));
+
+      // Intro pop (ease-out-back)
+      if (introStarted && introProg < 1.0) {
+        introProg = Math.min(introProg + dt * 1.4, 1.0);
+        const k = introProg;
+        const scaleVal = 1 + 2.4 * Math.pow(k - 1, 3) + 1.4 * Math.pow(k - 1, 2);
+        robot.scale.setScalar(Math.max(0.001, scaleVal));
+      }
+
+      // Reduced motion factor
+      const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const m = prefersReduced ? 0.25 : 1.0;
+
+      // Bobbing
+      const bob = Math.sin(t * 1.6) * 0.09 * m;
+      robot.position.y = bob;
+
+      // Head & Body Rotations
+      head.rotation.y = look.x * 0.5;
+      head.rotation.x = look.y * 0.42;
+      head.rotation.z = -look.x * 0.06 + Math.sin(t * 1.1) * 0.015 * m;
+
+      body.rotation.y = look.x * 0.28;
+      body.rotation.x = look.y * 0.12;
+
+      // Floating Arms
+      for (const arm of arms) {
+        const w = Math.sin(t * 2.0 + arm.phase);
+        arm.group.position.y = arm.restY + w * 0.13 * m - bob * 0.35;
+        arm.group.position.x = arm.restX + Math.sign(arm.restX) * look.x * -0.04;
+        arm.group.rotation.z = arm.restRz + w * 0.12 * Math.sign(arm.restX) * m;
+        arm.group.rotation.x = Math.sin(t * 1.3 + arm.phase) * 0.08 * m;
+      }
+
+      // Pupils Tracking
+      const pupilX = THREE.MathUtils.clamp(look.x * 0.075, -0.07, 0.07);
+      const pupilY = THREE.MathUtils.clamp(-look.y * 0.06, -0.06, 0.06);
+      for (const pw of pupilWraps) {
+        pw.position.set(pupilX, pupilY, 0);
+      }
+
+      // Blinking state machine
+      if (!isBlinking) {
+        if (now >= nextBlinkTime) {
+          isBlinking = true;
+          blinkStartTime = now;
+        }
+      } else {
+        const blinkElapsed = (now - blinkStartTime) / 1000;
+        const blinkDuration = 0.32;
+        if (blinkElapsed >= blinkDuration) {
+          isBlinking = false;
+          nextBlinkTime = now + (2500 + Math.random() * 3500);
+          for (const eg of eyeGroups) {
+            eg.scale.y = 1;
+          }
+        } else {
+          const p = blinkElapsed / blinkDuration;
+          const sy = p <= 0.5 ? 1 - 0.92 * (p / 0.5) : 0.08 + 0.92 * ((p - 0.5) / 0.5);
+          for (const eg of eyeGroups) {
+            eg.scale.y = sy;
+          }
+        }
+      }
+
+      // Floor glow follows bob
+      floorGlow.scale.set(3.4 - bob * 3, 0.42 - bob * 0.4, 1);
+      floorGlowMat.opacity = 0.7 + (0.09 - bob) * 1.5;
+
+      // Antenna glow pulse
+      const antOp = 0.7 * (0.85 + Math.sin(t * 1.6) * 0.15) + 0.15;
+      for (const s of antennaGlowSprites) {
+        s.material.opacity = antOp;
+      }
+
+      // Render through composer
+      if (isVisible) {
+        composer.render();
+      }
+    }
+
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>

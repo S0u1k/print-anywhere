@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">PocketPrint Bridge</string>
+    <string name="usb_permission_action">com.pocketprint.bridge.USB_PERMISSION</string>
+    <string name="notification_channel_name">Print Gateway Service</string>
+    <string name="notification_channel_desc">Maintains remote connection for incoming print jobs</string>
+    <string name="service_running_title">PocketPrint Bridge Active</string>
+    <string name="service_running_desc">Listening for remote print jobs...</string>
+</resources>

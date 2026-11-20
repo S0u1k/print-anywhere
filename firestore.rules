@@ -1,0 +1,84 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isUser(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isWorkspaceMember(workspaceId) {
+      return isAuthenticated() && (
+        request.auth.uid == get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerUid ||
+        exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid))
+      );
+    }
+
+    // User profile collection
+    match /users/{uid} {
+      allow read, write: if isUser(uid);
+    }
+
+    // Workspaces collection
+    match /workspaces/{workspaceId} {
+      // Allow workspace creation by any authenticated (account or anonymous) user
+      allow create: if isAuthenticated() && request.resource.data.ownerUid == request.auth.uid;
+      // Allow read/update by workspace owner or member
+      allow read, update: if isWorkspaceMember(workspaceId) || (isAuthenticated() && resource.data.ownerUid == request.auth.uid);
+      allow delete: if isAuthenticated() && resource.data.ownerUid == request.auth.uid;
+
+      // Workspace Members
+      match /members/{memberUid} {
+        allow read: if isWorkspaceMember(workspaceId);
+        allow write: if isAuthenticated() && get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerUid == request.auth.uid;
+      }
+
+      // Devices registered in this workspace
+      match /devices/{deviceId} {
+        allow read: if isWorkspaceMember(workspaceId);
+        allow create, update: if isWorkspaceMember(workspaceId) || (isAuthenticated() && request.auth.token.role == 'gateway');
+        allow delete: if isWorkspaceMember(workspaceId);
+      }
+
+      // Gateways registered in this workspace
+      match /gateways/{gatewayId} {
+        allow read: if isWorkspaceMember(workspaceId);
+        allow create, update: if isWorkspaceMember(workspaceId) || (isAuthenticated() && request.auth.uid == gatewayId);
+        allow delete: if isWorkspaceMember(workspaceId);
+      }
+
+      // Printers discovered and registered under this workspace
+      match /printers/{printerId} {
+        allow read: if isWorkspaceMember(workspaceId);
+        allow write: if isWorkspaceMember(workspaceId) || (isAuthenticated() && request.auth.token.role == 'gateway');
+      }
+
+      // Bidirectional pairing sessions
+      match /pairingSessions/{pairingId} {
+        allow read: if isAuthenticated();
+        allow create: if isWorkspaceMember(workspaceId);
+        allow update: if isAuthenticated(); // For claimer to submit claim or initiator to approve
+        allow delete: if isWorkspaceMember(workspaceId);
+      }
+
+      // Print jobs
+      match /printJobs/{jobId} {
+        allow read: if isWorkspaceMember(workspaceId) || (isAuthenticated() && request.auth.token.role == 'gateway');
+        allow create: if isWorkspaceMember(workspaceId);
+        allow update: if isWorkspaceMember(workspaceId) || (isAuthenticated() && request.auth.token.role == 'gateway');
+        allow delete: if isWorkspaceMember(workspaceId);
+
+        // Job telemetry and state transition events
+        match /events/{eventId} {
+          allow read: if isWorkspaceMember(workspaceId);
+          allow create: if isWorkspaceMember(workspaceId) || (isAuthenticated() && request.auth.token.role == 'gateway');
+        }
+      }
+    }
+  }
+}

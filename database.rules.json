@@ -1,0 +1,42 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "presence": {
+      "$gatewayUid": {
+        ".read": "auth != null",
+        ".write": "auth != null && (auth.uid === $gatewayUid || auth.token.admin === true)"
+      }
+    },
+
+    "gatewayInbox": {
+      "$gatewayUid": {
+        ".read": "auth != null && (auth.uid === $gatewayUid || auth.token.admin === true)",
+        ".write": "auth != null",
+        "$jobId": {
+          ".read": "auth != null && (auth.uid === $gatewayUid || auth.token.admin === true)",
+          ".write": "auth != null"
+        }
+      }
+    },
+
+    "gatewayAcks": {
+      "$gatewayUid": {
+        ".read": "auth != null",
+        ".write": "auth != null && (auth.uid === $gatewayUid || auth.token.admin === true)",
+        "$jobId": {
+          ".read": "auth != null",
+          ".write": "auth != null && (auth.uid === $gatewayUid || auth.token.admin === true)"
+        }
+      }
+    },
+
+    "gatewayStatus": {
+      "$gatewayUid": {
+        ".read": "auth != null",
+        ".write": "auth != null && (auth.uid === $gatewayUid || auth.token.admin === true)"
+      }
+    }
+  }
+}
