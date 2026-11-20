@@ -27,6 +27,7 @@ export interface PrintDocumentsPageProps {
   printers?: PrinterType[];
   onJobCreated: () => void;
   onNavigateToQueue: () => void;
+  onOpenPairing?: () => void;
 }
 
 export const PrintDocumentsPage: React.FC<PrintDocumentsPageProps> = ({
@@ -34,6 +35,7 @@ export const PrintDocumentsPage: React.FC<PrintDocumentsPageProps> = ({
   printers = [],
   onJobCreated,
   onNavigateToQueue,
+  onOpenPairing,
 }) => {
   const toast = useToast();
   const [file, setFile] = useState<File | null>(null);
@@ -241,8 +243,27 @@ export const PrintDocumentsPage: React.FC<PrintDocumentsPageProps> = ({
           </CardHeader>
           <CardContent>
             {printers.length === 0 && devices.length === 0 ? (
-              <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-900/60 text-xs text-amber-300">
-                No gateways or printers are registered yet. Start the Windows Laptop Agent or pair an Android phone in Device Management.
+              <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-900/60 text-xs text-amber-300 space-y-2.5">
+                <div className="flex items-center gap-2 font-bold">
+                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>No Gateway or Printer Detected in Current Workspace</span>
+                </div>
+                <p className="text-gray-300 leading-relaxed">
+                  To send prints, connect your Canon PIXMA MG2570S using either Mode A (run the Windows Laptop Agent) or Mode B (connect via USB OTG to the Android PocketPrint app).
+                </p>
+                {onOpenPairing && (
+                  <div className="pt-1">
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      type="button"
+                      onClick={onOpenPairing}
+                      className="border-amber-500/40 text-amber-300 hover:bg-amber-500/10"
+                    >
+                      Connect Gateway via QR or 8-Digit PIN
+                    </Button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

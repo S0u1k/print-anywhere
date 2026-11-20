@@ -1,7 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import fs from 'fs';
 import path from 'path';
-import http from 'http';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { DataStore } from './db/store.js';
@@ -53,22 +52,12 @@ async function checkPrinterQueue(printerName: string): Promise<number> {
 }
 
 async function downloadFile(url: string, destPath: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(destPath);
-    http.get(url, (response) => {
-      if (response.statusCode !== 200) {
-        return reject(new Error(`Download failed with HTTP ${response.statusCode}`));
-      }
-      response.pipe(file);
-      file.on('finish', () => {
-        file.close();
-        resolve();
-      });
-    }).on('error', (err) => {
-      fs.unlink(destPath, () => {});
-      reject(err);
-    });
-  });
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Download failed with HTTP ${res.status}`);
+  }
+  const arrayBuffer = await res.arrayBuffer();
+  fs.writeFileSync(destPath, Buffer.from(arrayBuffer));
 }
 
 async function spoolPdfToWindowsPrinter(filePath: string, printerName: string): Promise<void> {
@@ -276,19 +265,27 @@ async function startLaptopAgent() {
     }
   }, 10000);
 
-  // 5. Handle Incoming Print Jobs from Web / Mobile
-  socket.on('job:incoming', async (job: any) => {
-    console.log(`\n[Laptop Agent] >>> NEW PRINT JOB RECEIVED: "${job.originalName || job.fileName}" (Job ID: ${job.id})`);
+  // 5. Reusable Print Execution Engine
+  const processedJobIds = new Set<string>();
+
+  const executePrintJob = async (job: any) => {
+    if (processedJobIds.has(job.id)) return;
+    processedJobIds.add(job.id);
+
+    console.log(`\n[Laptop Agent] >>> PROCESSING PRINT JOB: "${job.originalName || job.fileName}" (Job ID: ${job.id})`);
     console.log(`[Laptop Agent] Destination Printer: "${activePrinterName}", Paper: ${job.options?.paperSize || 'A4'}, Copies: ${job.options?.copies || 1}`);
 
     const emitStatus = (status: JobStatus, progressPercent: number, message: string) => {
-      socket.emit('job:status_update', {
-        jobId: job.id,
-        status,
-        progressPercent,
-        message,
-        isSimulated: false,
-      });
+      if (socket.connected) {
+        socket.emit('job:status_update', {
+          jobId: job.id,
+          status,
+          progressPercent,
+          message,
+          isSimulated: false,
+        });
+      }
+      store.updatePrintJobStatus(job.id, status, progressPercent, message);
     };
 
     const tempDir = path.join(process.cwd(), 'temp_spool');
@@ -345,7 +342,37 @@ async function startLaptopAgent() {
         if (fs.existsSync(localPdfPath)) fs.unlinkSync(localPdfPath);
       } catch {}
     }
-  });
+  };
+
+  // Event trigger via WebSocket
+  socket.on('job:incoming', executePrintJob);
+
+  // Fallback Polling Loop (resilient to serverless environments)
+  setInterval(async () => {
+    try {
+      const jobsUrl = `${SERVER_URL}/api/jobs`;
+      const res = await fetch(jobsUrl, {
+        headers: {
+          'Authorization': `Bearer ${deviceToken}`,
+          'x-device-token': deviceToken,
+        },
+      });
+      if (res.ok) {
+        const data = (await res.json()) as any;
+        const pending = (data.jobs || []).filter(
+          (j: any) =>
+            (j.deviceId === device.id || j.gatewayType === 'WINDOWS_HOST') &&
+            ['QUEUED', 'DISPATCHED'].includes(j.status) &&
+            !processedJobIds.has(j.id)
+        );
+        for (const job of pending) {
+          await executePrintJob(job);
+        }
+      }
+    } catch {
+      // Quietly ignore transient network/polling errors
+    }
+  }, 5000);
 
   socket.on('device:revoked', () => {
     console.warn('[Laptop Agent] Received revocation notification from Cloud Relay: This device has been disconnected/revoked.');

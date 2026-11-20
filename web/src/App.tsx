@@ -215,6 +215,7 @@ function AuthenticatedApp() {
                 printers={printers}
                 onJobCreated={fetchData}
                 onNavigateToQueue={() => setActiveTab('queue')}
+                onOpenPairing={() => setShowPairingModal(true)}
               />
             )}
 
