@@ -1,18 +1,30 @@
-import { initializeApp, cert, type App } from 'firebase-admin/app';
-import { getAuth, type Auth, type DecodedIdToken } from 'firebase-admin/auth';
-import { getFirestore, type Firestore } from 'firebase-admin/firestore';
-import { getDatabase, type Database } from 'firebase-admin/database';
-import { getStorage, type Storage } from 'firebase-admin/storage';
-
-let firebaseApp: App | null = null;
+// Lazy-loaded Firebase Admin module to support serverless, local, and hybrid execution environments
+let firebaseApp: any = null;
 let isInitialized = false;
 
-export function initializeFirebaseAdmin(): App | null {
+export function initializeFirebaseAdmin(): any {
   if (isInitialized && firebaseApp) {
     return firebaseApp;
   }
 
+  // If no Firebase credentials exist in environment, skip loading firebase-admin
+  const hasCreds =
+    process.env.FIREBASE_SERVICE_ACCOUNT_JSON ||
+    (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) ||
+    process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+    process.env.FIREBASE_CONFIG;
+
+  if (!hasCreds) {
+    console.warn('[Firebase Admin] No Firebase service account credentials found. Running in hybrid local mode.');
+    isInitialized = true;
+    return null;
+  }
+
   try {
+    // Dynamically load firebase-admin/app only when credentials are provided
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { initializeApp, cert } = require('firebase-admin/app');
+
     // 1. Try single JSON string env var
     const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
     if (serviceAccountJson) {
@@ -57,22 +69,11 @@ export function initializeFirebaseAdmin(): App | null {
       return firebaseApp;
     }
 
-    // 4. Default / Project ID only fallback (Local / Development)
-    if (projectId) {
-      firebaseApp = initializeApp({
-        projectId,
-        databaseURL: process.env.FIREBASE_DATABASE_URL || `https://${projectId}-default-rtdb.firebaseio.com`,
-        storageBucket: process.env.FIREBASE_STORAGE_BUCKET || `${projectId}.appspot.com`,
-      });
-      isInitialized = true;
-      console.log(`[Firebase Admin] Initialized in development mode for project: ${projectId}`);
-      return firebaseApp;
-    }
-
-    console.warn('[Firebase Admin] No Firebase service account credentials found. Running in hybrid local mode.');
+    isInitialized = true;
     return null;
   } catch (err: any) {
     console.error('[Firebase Admin] Failed to initialize:', err.message);
+    isInitialized = true;
     return null;
   }
 }
@@ -81,30 +82,58 @@ export function isFirebaseConfigured(): boolean {
   return isInitialized && firebaseApp !== null;
 }
 
-export function getFirebaseAuth(): Auth | null {
+export function getFirebaseAuth(): any {
   if (!isFirebaseConfigured() || !firebaseApp) return null;
-  return getAuth(firebaseApp);
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getAuth } = require('firebase-admin/auth');
+    return getAuth(firebaseApp);
+  } catch (err: any) {
+    console.error('[Firebase Auth] Failed to load auth:', err.message);
+    return null;
+  }
 }
 
-export function getFirestoreDb(): Firestore | null {
+export function getFirestoreDb(): any {
   if (!isFirebaseConfigured() || !firebaseApp) return null;
-  return getFirestore(firebaseApp);
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getFirestore } = require('firebase-admin/firestore');
+    return getFirestore(firebaseApp);
+  } catch (err: any) {
+    console.error('[Firebase Firestore] Failed to load firestore:', err.message);
+    return null;
+  }
 }
 
-export function getRealtimeDb(): Database | null {
+export function getRealtimeDb(): any {
   if (!isFirebaseConfigured() || !firebaseApp) return null;
-  return getDatabase(firebaseApp);
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getDatabase } = require('firebase-admin/database');
+    return getDatabase(firebaseApp);
+  } catch (err: any) {
+    console.error('[Firebase RTDB] Failed to load RTDB:', err.message);
+    return null;
+  }
 }
 
-export function getFirebaseStorage(): Storage | null {
+export function getFirebaseStorage(): any {
   if (!isFirebaseConfigured() || !firebaseApp) return null;
-  return getStorage(firebaseApp);
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getStorage } = require('firebase-admin/storage');
+    return getStorage(firebaseApp);
+  } catch (err: any) {
+    console.error('[Firebase Storage] Failed to load storage:', err.message);
+    return null;
+  }
 }
 
 /**
  * Verify Firebase ID Token from client
  */
-export async function verifyFirebaseIdToken(token: string): Promise<DecodedIdToken | null> {
+export async function verifyFirebaseIdToken(token: string): Promise<any | null> {
   const auth = getFirebaseAuth();
   if (!auth) return null;
   try {
