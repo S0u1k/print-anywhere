@@ -13,7 +13,8 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import okhttp3.OkHttpClient
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
@@ -33,6 +34,8 @@ class RelayWebSocketClient(private val context: Context) {
 
     private var socket: Socket? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var pollingJob: Job? = null
+    private val processedJobIds = mutableSetOf<String>()
 
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
@@ -124,9 +127,58 @@ class RelayWebSocketClient(private val context: Context) {
             }
 
             socket?.connect()
+            startPollingLoop()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize socket connection", e)
             _connectionError.value = e.message
+            startPollingLoop()
+        }
+    }
+
+    private fun startPollingLoop() {
+        pollingJob?.cancel()
+        pollingJob = scope.launch {
+            while (isActive) {
+                try {
+                    if (currentServerUrl.isNotEmpty() && currentToken.isNotEmpty()) {
+                        val url = "${currentServerUrl.removeSuffix("/")}/api/jobs"
+                        val req = Request.Builder()
+                            .url(url)
+                            .addHeader("Authorization", "Bearer $currentToken")
+                            .addHeader("X-Device-Token", currentToken)
+                            .build()
+                        val resp = httpClient.newCall(req).execute()
+                        if (resp.isSuccessful) {
+                            val bodyStr = resp.body?.string()
+                            if (!bodyStr.isNullOrEmpty()) {
+                                val root = JSONObject(bodyStr)
+                                val arr = root.optJSONArray("jobs")
+                                if (arr != null) {
+                                    for (i in 0 until arr.length()) {
+                                        val jObj = arr.getJSONObject(i)
+                                        val id = jObj.optString("id")
+                                        val st = jObj.optString("status")
+                                        val devId = jObj.optString("deviceId")
+                                        val gw = jObj.optString("gatewayType")
+                                        if (id.isNotEmpty() && !processedJobIds.contains(id) &&
+                                            (st == "QUEUED" || st == "DISPATCHED") &&
+                                            (devId == currentDeviceId || gw == "ANDROID_USB")
+                                        ) {
+                                            processedJobIds.add(id)
+                                            val job = gson.fromJson(jObj.toString(), PrintJob::class.java)
+                                            onJobReceived?.invoke(job)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        resp.close()
+                    }
+                } catch (e: Exception) {
+                    // Suppress transient network polling exceptions
+                }
+                delay(5000)
+            }
         }
     }
 
@@ -160,24 +212,48 @@ class RelayWebSocketClient(private val context: Context) {
         message: String?,
         isSimulated: Boolean
     ) {
-        if (socket?.connected() != true) {
-            Log.w(TAG, "Cannot emit job status update: socket disconnected")
-            return
-        }
-        try {
-            val payload = JSONObject().apply {
-                put("jobId", jobId)
-                put("deviceId", currentDeviceId)
-                put("status", status.name)
-                put("progressPercent", progressPercent)
-                put("message", message ?: "")
-                put("isSimulated", isSimulated)
-                put("timestamp", System.currentTimeMillis())
+        if (socket?.connected() == true) {
+            try {
+                val payload = JSONObject().apply {
+                    put("jobId", jobId)
+                    put("deviceId", currentDeviceId)
+                    put("status", status.name)
+                    put("progressPercent", progressPercent)
+                    put("message", message ?: "")
+                    put("isSimulated", isSimulated)
+                    put("timestamp", System.currentTimeMillis())
+                }
+                socket?.emit("job:status_update", payload)
+                Log.d(TAG, "Emitted job status update via socket: $jobId -> ${status.name} ($progressPercent%)")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to emit job status update via socket", e)
             }
-            socket?.emit("job:status_update", payload)
-            Log.d(TAG, "Emitted job status update: $jobId -> ${status.name} ($progressPercent%)")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to emit job status update", e)
+        }
+
+        // Dual/fallback REST dispatch (ensures status updates persist in serverless cloud relay)
+        if (currentServerUrl.isNotEmpty() && currentToken.isNotEmpty()) {
+            scope.launch {
+                try {
+                    val url = "${currentServerUrl.removeSuffix("/")}/api/jobs/$jobId/status"
+                    val jsonBody = JSONObject().apply {
+                        put("status", status.name)
+                        put("progressPercent", progressPercent)
+                        put("message", message ?: "")
+                        put("isSimulated", isSimulated)
+                    }.toString()
+                    val req = Request.Builder()
+                        .url(url)
+                        .patch(jsonBody.toRequestBody("application/json".toMediaTypeOrNull()))
+                        .addHeader("Authorization", "Bearer $currentToken")
+                        .addHeader("X-Device-Token", currentToken)
+                        .build()
+                    val resp = httpClient.newCall(req).execute()
+                    resp.close()
+                    Log.d(TAG, "Emitted job status update via REST: $jobId -> ${status.name}")
+                } catch (e: Exception) {
+                    Log.w(TAG, "REST status update error (non-fatal): ${e.message}")
+                }
+            }
         }
     }
 
@@ -225,6 +301,8 @@ class RelayWebSocketClient(private val context: Context) {
 
     fun disconnect() {
         try {
+            pollingJob?.cancel()
+            pollingJob = null
             socket?.disconnect()
             socket?.off()
             socket = null

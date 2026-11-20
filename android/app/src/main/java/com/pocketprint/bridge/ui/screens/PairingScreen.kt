@@ -24,7 +24,7 @@ fun PairingScreen(
     onPairSubmit: (serverUrl: String, deviceId: String, token: String, deviceName: String) -> Unit,
     onNavigateBack: () -> Unit
 ) {
-    var serverUrl by remember { mutableStateOf(currentServerUrl.ifEmpty { "http://10.0.2.2:5000" }) }
+    var serverUrl by remember { mutableStateOf(currentServerUrl.ifEmpty { "https://print-anywhere-three.vercel.app" }) }
     var deviceId by remember { mutableStateOf(currentDeviceId.ifEmpty { "phone-" + (1000..9999).random() }) }
     var deviceName by remember { mutableStateOf("Android Gateway Phone") }
     var pairingCodeOrToken by remember { mutableStateOf("") }

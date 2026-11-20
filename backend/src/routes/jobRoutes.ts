@@ -195,10 +195,17 @@ const handleUpload = async (req: AuthenticatedRequest, res: Response): Promise<v
 router.post('/upload', requireSessionAuth, upload.single('file'), handleUpload);
 router.post('/', requireSessionAuth, upload.single('file'), handleUpload);
 
-// List jobs for current session (account or guest workspace)
-router.get('/', requireSessionAuth, (req: AuthenticatedRequest, res: Response) => {
-  const scopeId = req.workspaceId!;
-  const jobs = store.findPrintJobsByScope(scopeId);
+// List jobs for current session (account or guest workspace) or paired gateway device
+router.get('/', requireSessionOrDeviceAuth, (req: AuthenticatedRequest, res: Response) => {
+  const scopeId = req.workspaceId;
+  let jobs = scopeId ? store.findPrintJobsByScope(scopeId) : [];
+  if (req.device?.deviceId) {
+    const deviceJobs = store.findPrintJobsByDeviceId(req.device.deviceId);
+    const jobMap = new Map();
+    jobs.forEach((j) => jobMap.set(j.id, j));
+    deviceJobs.forEach((j) => jobMap.set(j.id, j));
+    jobs = Array.from(jobMap.values()).sort((a, b) => b.createdAt - a.createdAt);
+  }
   res.json({ jobs });
 });
 

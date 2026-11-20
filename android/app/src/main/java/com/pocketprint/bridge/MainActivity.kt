@@ -26,7 +26,14 @@ import com.pocketprint.bridge.data.model.PrintJob
 import com.pocketprint.bridge.service.PrintGatewayService
 import com.pocketprint.bridge.ui.screens.*
 import com.pocketprint.bridge.ui.theme.PocketPrintTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
 
@@ -162,13 +169,51 @@ class MainActivity : ComponentActivity() {
                         onGetStarted = { currentScreen = "pairing" }
                     )
                     "pairing" -> PairingScreen(
-                        currentServerUrl = "http://10.0.2.2:5000",
+                        currentServerUrl = "https://print-anywhere-three.vercel.app",
                         currentDeviceId = "android-gateway-01",
                         isPaired = isCloudConnected,
-                        onPairSubmit = { serverUrl, devId, token, name ->
-                            gatewayService?.startGateway(serverUrl, devId, token, name, isSimulatedMode)
-                            currentScreen = "dashboard"
-                            Toast.makeText(this@MainActivity, "Connecting to Cloud Relay...", Toast.LENGTH_SHORT).show()
+                        onPairSubmit = { serverUrl, devId, tokenOrCode, name ->
+                            scope.launch {
+                                var finalToken = tokenOrCode
+                                val targetUrl = if (serverUrl.isBlank()) "https://print-anywhere-three.vercel.app" else serverUrl.trim()
+                                
+                                // Auto-exchange pairing code for JWT device token if code entered
+                                if (!tokenOrCode.startsWith("ey") && tokenOrCode.isNotBlank()) {
+                                    Toast.makeText(this@MainActivity, "Exchanging pairing code...", Toast.LENGTH_SHORT).show()
+                                    try {
+                                        withContext(Dispatchers.IO) {
+                                            val client = OkHttpClient()
+                                            val claimUrl = "${targetUrl.removeSuffix("/")}/api/devices/pair"
+                                            val payload = JSONObject().apply {
+                                                put("pairingCode", tokenOrCode.replace("-", "").trim())
+                                                put("deviceId", devId)
+                                                put("deviceName", name)
+                                                put("gatewayType", "ANDROID_USB")
+                                            }.toString()
+                                            val req = Request.Builder()
+                                                .url(claimUrl)
+                                                .post(payload.toRequestBody("application/json".toMediaTypeOrNull()))
+                                                .build()
+                                            val resp = client.newCall(req).execute()
+                                            if (resp.isSuccessful) {
+                                                val resBody = resp.body?.string() ?: ""
+                                                val resJson = JSONObject(resBody)
+                                                val returnedToken = resJson.optString("deviceToken")
+                                                if (returnedToken.isNotBlank()) {
+                                                    finalToken = returnedToken
+                                                }
+                                            }
+                                            resp.close()
+                                        }
+                                    } catch (e: Exception) {
+                                        android.util.Log.w("MainActivity", "Pairing code exchange failed: ${e.message}")
+                                    }
+                                }
+
+                                gatewayService?.startGateway(targetUrl, devId, finalToken, name, isSimulatedMode)
+                                currentScreen = "dashboard"
+                                Toast.makeText(this@MainActivity, "Connecting to Gateway...", Toast.LENGTH_SHORT).show()
+                            }
                         },
                         onNavigateBack = { currentScreen = "dashboard" }
                     )

@@ -275,7 +275,7 @@ async function startLaptopAgent() {
     console.log(`\n[Laptop Agent] >>> PROCESSING PRINT JOB: "${job.originalName || job.fileName}" (Job ID: ${job.id})`);
     console.log(`[Laptop Agent] Destination Printer: "${activePrinterName}", Paper: ${job.options?.paperSize || 'A4'}, Copies: ${job.options?.copies || 1}`);
 
-    const emitStatus = (status: JobStatus, progressPercent: number, message: string) => {
+    const emitStatus = async (status: JobStatus, progressPercent: number, message: string) => {
       if (socket.connected) {
         socket.emit('job:status_update', {
           jobId: job.id,
@@ -285,6 +285,17 @@ async function startLaptopAgent() {
           isSimulated: false,
         });
       }
+      try {
+        await fetch(`${SERVER_URL}/api/jobs/${job.id}/status`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${deviceToken}`,
+            'x-device-token': deviceToken,
+          },
+          body: JSON.stringify({ status, progressPercent, message }),
+        });
+      } catch {}
       store.updatePrintJobStatus(job.id, status, progressPercent, message);
     };
 
@@ -296,7 +307,7 @@ async function startLaptopAgent() {
 
     try {
       // Step 1: RECEIVED_BY_GATEWAY
-      emitStatus('RECEIVED_BY_GATEWAY', 20, 'PDF received by Windows Laptop Print Agent');
+      await emitStatus('RECEIVED_BY_GATEWAY', 20, 'PDF received by Windows Laptop Print Agent');
 
       // Step 2: Download PDF securely
       const downloadUrl = `${SERVER_URL}/api/jobs/${job.id}/download?token=${job.downloadToken}`;
@@ -309,23 +320,23 @@ async function startLaptopAgent() {
       }
 
       // Step 3: VALIDATING
-      emitStatus('VALIDATING', 35, `Validating document for "${activePrinterName}"...`);
+      await emitStatus('VALIDATING', 35, `Validating document for "${activePrinterName}"...`);
       await new Promise((r) => setTimeout(r, 600));
 
       // Step 4: SUBMITTED_TO_PRINTER
-      emitStatus('SUBMITTED_TO_PRINTER', 50, `Submitting document to Canon Windows Driver on USB001...`);
+      await emitStatus('SUBMITTED_TO_PRINTER', 50, `Submitting document to Canon Windows Driver on USB001...`);
       await new Promise((r) => setTimeout(r, 500));
 
       // Step 5: SPOOLING
-      emitStatus('SPOOLING', 70, `Spooling print job to Windows Print Queue...`);
+      await emitStatus('SPOOLING', 70, `Spooling print job to Windows Print Queue...`);
       await spoolPdfToWindowsPrinter(localPdfPath, activePrinterName);
 
       // Step 6: SPOOLER_COMPLETED
-      emitStatus('SPOOLER_COMPLETED', 90, `Windows Spooler transmitted job data to Canon PIXMA MG2570S`);
+      await emitStatus('SPOOLER_COMPLETED', 90, `Windows Spooler transmitted job data to Canon PIXMA MG2570S`);
       await new Promise((r) => setTimeout(r, 800));
 
       // Step 7: COMPLETED
-      emitStatus('COMPLETED', 100, `Print job successfully spooled to Canon PIXMA MG2570S via USB001!`);
+      await emitStatus('COMPLETED', 100, `Print job successfully spooled to Canon PIXMA MG2570S via USB001!`);
       console.log(`[Laptop Agent] >>> PRINT JOB ${job.id} COMPLETED SUCCESSFULLY!\n`);
 
       // Cleanup local temp file after delay
@@ -337,7 +348,7 @@ async function startLaptopAgent() {
 
     } catch (err: any) {
       console.error(`[Laptop Agent] Error processing job ${job.id}:`, err);
-      emitStatus('FAILED', 0, `Print error: ${err.message || 'Windows Spooler dispatch failure'}`);
+      await emitStatus('FAILED', 0, `Print error: ${err.message || 'Windows Spooler dispatch failure'}`);
       try {
         if (fs.existsSync(localPdfPath)) fs.unlinkSync(localPdfPath);
       } catch {}
