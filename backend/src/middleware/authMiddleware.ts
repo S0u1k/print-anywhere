@@ -69,3 +69,38 @@ export function requireDeviceAuth(
   req.workspaceId = payload.workspaceId || payload.userId;
   next();
 }
+
+/**
+ * Middleware that authenticates either a session token OR a device token.
+ */
+export function requireSessionOrDeviceAuth(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): void {
+  const authHeader = req.headers.authorization;
+  const deviceHeader = req.headers['x-device-token'] as string;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : deviceHeader;
+
+  if (!token) {
+    res.status(401).json({ error: 'Unauthorized: Missing session or device token' });
+    return;
+  }
+
+  const sessionPayload = verifyToken<AuthTokenPayload>(token);
+  if (sessionPayload && (sessionPayload.userId || sessionPayload.workspaceId)) {
+    req.user = sessionPayload;
+    req.isGuest = !!sessionPayload.isGuest;
+    req.workspaceId = sessionPayload.workspaceId || sessionPayload.userId;
+    return next();
+  }
+
+  const devicePayload = verifyToken<DeviceTokenPayload>(token);
+  if (devicePayload && devicePayload.deviceId) {
+    req.device = devicePayload;
+    req.workspaceId = devicePayload.workspaceId || devicePayload.userId;
+    return next();
+  }
+
+  res.status(401).json({ error: 'Unauthorized: Invalid or expired token' });
+}

@@ -8,6 +8,7 @@ import { DataStore } from '../db/store.js';
 const uuidv4 = () => crypto.randomUUID();
 import {
   requireSessionAuth,
+  requireSessionOrDeviceAuth,
   AuthenticatedRequest,
 } from '../middleware/authMiddleware.js';
 import {
@@ -265,6 +266,36 @@ router.post('/:id/retry', requireSessionAuth, (req: AuthenticatedRequest, res: R
 
   res.json({ message: 'Job re-queued', job: updated });
 });
+
+// Update job status (HTTP REST endpoint for gateways and clients)
+const handleStatusUpdate = (req: AuthenticatedRequest, res: Response) => {
+  const jobId = String(req.params.id);
+  const scopeId = req.workspaceId!;
+  const job = store.findPrintJobById(jobId);
+
+  if (!job || (job.userId !== scopeId && job.workspaceId !== scopeId)) {
+    res.status(404).json({ error: 'Job not found or inaccessible in current scope' });
+    return;
+  }
+
+  const { status, progressPercent, message } = req.body;
+  if (!status) {
+    res.status(400).json({ error: 'status is required' });
+    return;
+  }
+
+  const updated = store.updatePrintJobStatus(
+    job.id,
+    status,
+    typeof progressPercent === 'number' ? progressPercent : job.progressPercent,
+    message || ''
+  );
+
+  res.json({ message: 'Job status updated successfully', job: updated });
+};
+
+router.patch('/:id/status', requireSessionOrDeviceAuth, handleStatusUpdate);
+router.post('/:id/status', requireSessionOrDeviceAuth, handleStatusUpdate);
 
 // Secure PDF Download for Phone or Laptop Gateway
 router.get('/:id/download', (req: Request, res: Response) => {
