@@ -11,6 +11,12 @@ import {
   PrintJobEvent,
   FileMetadata,
 } from '../types/index.js';
+import { normalizePairingCode } from '../utils/auth.js';
+import {
+  syncPublishPairingSession,
+  syncFetchPairingSessionByCode,
+  syncFetchPairingSessionById,
+} from '../utils/pairingSync.js';
 
 interface DatabaseData {
   users: User[];
@@ -265,6 +271,9 @@ export class DataStore {
   public createPairingSession(session: PairingSession): PairingSession {
     this.data.pairingSessions.push(session);
     this.persist();
+    syncPublishPairingSession(session).catch((err) => {
+      console.warn('[DataStore] Background pairing session sync warning:', err.message);
+    });
     return session;
   }
 
@@ -273,12 +282,49 @@ export class DataStore {
     return this.data.pairingSessions.find((s) => s.id === id);
   }
 
+  public async findPairingSessionByIdAsync(id: string): Promise<PairingSession | undefined> {
+    const local = this.findPairingSessionById(id);
+    if (local) return local;
+
+    const remote = await syncFetchPairingSessionById(id);
+    if (remote) {
+      const idx = this.data.pairingSessions.findIndex((s) => s.id === remote.id);
+      if (idx >= 0) {
+        this.data.pairingSessions[idx] = remote;
+      } else {
+        this.data.pairingSessions.push(remote);
+      }
+      this.persist();
+      return remote;
+    }
+    return undefined;
+  }
+
   public findPairingSessionByCode(code: string): PairingSession | undefined {
     this.load();
-    const cleanCode = code.trim().toUpperCase();
+    const cleanCode = normalizePairingCode(code);
     return this.data.pairingSessions.find(
-      (s) => s.pairingCode.replace('-', '').toUpperCase() === cleanCode.replace('-', '')
+      (s) => normalizePairingCode(s.pairingCode) === cleanCode
     );
+  }
+
+  public async findPairingSessionByCodeAsync(code: string): Promise<PairingSession | undefined> {
+    const local = this.findPairingSessionByCode(code);
+    if (local) return local;
+
+    // Distributed fallback for multi-container serverless execution
+    const remote = await syncFetchPairingSessionByCode(code);
+    if (remote) {
+      const idx = this.data.pairingSessions.findIndex((s) => s.id === remote.id);
+      if (idx >= 0) {
+        this.data.pairingSessions[idx] = remote;
+      } else {
+        this.data.pairingSessions.push(remote);
+      }
+      this.persist();
+      return remote;
+    }
+    return undefined;
   }
 
   public findPairingSessionByQrToken(qrToken: string): PairingSession | undefined {
@@ -291,6 +337,7 @@ export class DataStore {
     if (session) {
       Object.assign(session, updates);
       this.persist();
+      syncPublishPairingSession(session).catch(() => {});
     }
     return session;
   }
@@ -301,6 +348,7 @@ export class DataStore {
       s.status = 'COMPLETED';
       s.completedAt = Date.now();
       this.persist();
+      syncPublishPairingSession(s).catch(() => {});
     }
   }
 
@@ -482,3 +530,6 @@ export class DataStore {
     return cleaned;
   }
 }
+
+export const store = DataStore.getInstance();
+

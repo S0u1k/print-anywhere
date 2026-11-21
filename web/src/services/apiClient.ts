@@ -157,7 +157,7 @@ export async function apiRequest<T = any>(
         errorBody = { raw: rawText.slice(0, 200) };
       }
 
-      const serverMessage = errorBody?.error || errorBody?.message;
+      const serverMessage = errorBody?.message || errorBody?.error;
       let errorCode: ApiErrorCode = 'HTTP_500';
       let userFriendlyMessage = 'A server error occurred. Please try again.';
 

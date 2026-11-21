@@ -57,6 +57,18 @@ export function verifyToken<T>(token: string): T | null {
 }
 
 /**
+ * Canonical normalization for pairing codes:
+ * Converts to uppercase, strips all whitespace, hyphens, em-dashes, and non-alphanumeric characters.
+ */
+export function normalizePairingCode(code: string | undefined | null): string {
+  if (!code || typeof code !== 'string') return '';
+  return code
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .trim();
+}
+
+/**
  * Generates an 8-character manual pairing code in XXXX-XXXX format.
  * Omits ambiguous characters (0, O, 1, I, L) for error-free manual typing.
  */

@@ -122,11 +122,31 @@ export const api = {
   async approvePairingSession(
     sessionId: string,
     approved: boolean
-  ): Promise<{ message: string; session: PairingSession; deviceToken?: string }> {
+  ): Promise<{
+    message: string;
+    status: string;
+    workspaceId?: string;
+    initiatorDevice?: any;
+    claimerDevice?: any;
+    initiatorToken?: string;
+    claimerToken?: string;
+    session?: PairingSession;
+    deviceToken?: string;
+  }> {
     return apiClient.post(`/pairing/sessions/${sessionId}/approve`, { approved });
   },
 
-  async getPairingSessionStatus(sessionId: string): Promise<PairingSession> {
+  async getPairingSessionStatus(sessionId: string): Promise<{
+    sessionId: string;
+    status: string;
+    expiresAt: number;
+    workspaceId?: string;
+    initiator?: any;
+    claimer?: any;
+    initiatorToken?: string;
+    claimerToken?: string;
+    completedAt?: number;
+  }> {
     return apiClient.get(`/pairing/sessions/${sessionId}/status`);
   },
 

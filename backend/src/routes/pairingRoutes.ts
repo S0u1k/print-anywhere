@@ -10,6 +10,7 @@ import {
   generateRecoveryKey,
   hashSecret,
   verifyToken,
+  normalizePairingCode,
 } from '../utils/auth.js';
 import {
   broadcastToPairingSession,
@@ -153,7 +154,10 @@ function handleClaim(
   if (now > session.expiresAt || session.status === 'EXPIRED') {
     session.status = 'EXPIRED';
     store.updatePairingSession(session.id, { status: 'EXPIRED' });
-    res.status(410).json({ error: 'Pairing session has expired. Please generate a new code.' });
+    res.status(410).json({
+      error: 'This pairing code has expired. Generate a new code on the other device.',
+      code: 'PAIRING_CODE_EXPIRED',
+    });
     return;
   }
 
@@ -162,18 +166,33 @@ function handleClaim(
   if (session.attempts > session.maxAttempts) {
     session.status = 'EXPIRED';
     store.updatePairingSession(session.id, { status: 'EXPIRED' });
-    res.status(429).json({ error: 'Too many invalid attempts. Session terminated.' });
+    res.status(429).json({
+      error: 'Too many invalid attempts. Session terminated.',
+      code: 'PAIRING_ATTEMPTS_EXCEEDED',
+    });
+    return;
+  }
+
+  // Already claimed or completed check
+  if (session.status === 'COMPLETED') {
+    res.status(409).json({
+      error: 'This code has already been used. Generate a new pairing code.',
+      code: 'PAIRING_CODE_ALREADY_USED',
+    });
     return;
   }
 
   if (session.status !== 'PENDING') {
-    res.status(400).json({ error: `Session is not pending (current status: ${session.status})` });
+    res.status(400).json({
+      error: `Session is not pending (current status: ${session.status})`,
+      code: 'PAIRING_CODE_INVALID',
+    });
     return;
   }
 
-  // Code or QR token match check
-  const providedCode = body.pairingCode?.trim().toUpperCase().replace('-', '');
-  const expectedCode = session.pairingCode.replace('-', '').toUpperCase();
+  // Code or QR token match check (Canonical normalization)
+  const providedCode = normalizePairingCode(body.pairingCode);
+  const expectedCode = normalizePairingCode(session.pairingCode);
   const providedQrToken = body.qrToken?.trim();
 
   const codeMatches = providedCode && providedCode === expectedCode;
@@ -183,7 +202,23 @@ function handleClaim(
     store.updatePairingSession(session.id, { attempts: session.attempts });
     res.status(403).json({
       error: 'Invalid pairing code or QR token',
+      code: 'PAIRING_CODE_INVALID',
       remainingAttempts: session.maxAttempts - session.attempts,
+    });
+    return;
+  }
+
+  // Device Role compatibility validation (Section 7)
+  const initiatorRole = session.initiatorDevice.role;
+  const claimerRole = (body.claimerGatewayRole as DeviceRole) || 'CONTROLLER';
+
+  if (
+    (initiatorRole === 'ANDROID_GATEWAY' && claimerRole === 'ANDROID_GATEWAY') ||
+    (initiatorRole === 'WINDOWS_GATEWAY' && claimerRole === 'WINDOWS_GATEWAY')
+  ) {
+    res.status(400).json({
+      error: 'Conflicting device roles: Two devices cannot both claim the same gateway role in one pairing session.',
+      code: 'PAIRING_DEVICE_ROLE_INVALID',
     });
     return;
   }
@@ -193,8 +228,8 @@ function handleClaim(
     name: body.claimerDeviceName || 'PocketPrint Client',
     deviceType: (body.claimerDeviceType as DeviceType) || 'PHONE',
     os: body.claimerOs || 'Android',
-    role: (body.claimerGatewayRole as DeviceRole) || 'CONTROLLER',
-    gatewayType: body.claimerGatewayRole === 'WINDOWS_GATEWAY' ? 'WINDOWS_HOST' : body.claimerGatewayRole === 'ANDROID_GATEWAY' ? 'ANDROID_USB' : undefined,
+    role: claimerRole,
+    gatewayType: claimerRole === 'WINDOWS_GATEWAY' ? 'WINDOWS_HOST' : claimerRole === 'ANDROID_GATEWAY' ? 'ANDROID_USB' : undefined,
     printerModel: body.printerModel || null,
   };
 
@@ -223,12 +258,15 @@ function handleClaim(
  * POST /api/pairing/sessions/:id/claim
  * Joiner claims session using Session ID + code/qrToken.
  */
-router.post('/sessions/:id/claim', (req: Request, res: Response) => {
+router.post('/sessions/:id/claim', async (req: Request, res: Response) => {
   const sessionId = String(req.params.id);
-  const session = store.findPairingSessionById(sessionId);
+  const session = await store.findPairingSessionByIdAsync(sessionId);
 
   if (!session) {
-    res.status(404).json({ error: 'Pairing session not found' });
+    res.status(404).json({
+      error: 'Pairing session not found',
+      code: 'PAIRING_CODE_NOT_FOUND',
+    });
     return;
   }
 
@@ -239,16 +277,23 @@ router.post('/sessions/:id/claim', (req: Request, res: Response) => {
  * POST /api/pairing/code/claim
  * Direct manual code claim endpoint without requiring prior knowledge of session ID (Flow C and Flow D).
  */
-router.post('/code/claim', (req: Request, res: Response) => {
+router.post('/code/claim', async (req: Request, res: Response) => {
   const { pairingCode } = req.body;
   if (!pairingCode) {
-    res.status(400).json({ error: 'pairingCode is required' });
+    res.status(400).json({
+      error: 'pairingCode is required',
+      code: 'PAIRING_CODE_INVALID',
+    });
     return;
   }
 
-  const session = store.findPairingSessionByCode(pairingCode);
+  const session = await store.findPairingSessionByCodeAsync(pairingCode);
   if (!session) {
-    res.status(404).json({ error: 'Pairing code not found or invalid' });
+    res.status(404).json({
+      error: 'Pairing code not found or invalid',
+      code: 'PAIRING_CODE_NOT_FOUND',
+      message: 'Pairing code not found. Generate a new code on the other device and try again.',
+    });
     return;
   }
 
@@ -259,18 +304,18 @@ router.post('/code/claim', (req: Request, res: Response) => {
  * POST /api/pairing/sessions/:id/approve
  * Initiator approves or rejects the claimed pairing request.
  */
-router.post('/sessions/:id/approve', (req: Request, res: Response) => {
+router.post('/sessions/:id/approve', async (req: Request, res: Response) => {
   const sessionId = String(req.params.id);
   const { approved } = req.body;
-  const session = store.findPairingSessionById(sessionId);
+  const session = await store.findPairingSessionByIdAsync(sessionId);
 
   if (!session) {
-    res.status(404).json({ error: 'Pairing session not found' });
+    res.status(404).json({ error: 'Pairing session not found', code: 'PAIRING_CODE_NOT_FOUND' });
     return;
   }
 
   if (session.status !== 'CLAIMED' || !session.claimerDevice) {
-    res.status(400).json({ error: 'Session is not currently in CLAIMED status' });
+    res.status(400).json({ error: 'Session is not currently in CLAIMED status', code: 'PAIRING_CODE_INVALID' });
     return;
   }
 
@@ -381,10 +426,13 @@ router.post('/sessions/:id/approve', (req: Request, res: Response) => {
     isRevoked: false,
   });
 
-  // 6. Complete Session & Notify via WebSocket
+  // 6. Complete Session & Notify via WebSocket and Persistent Sync
   store.updatePairingSession(sessionId, {
     status: 'COMPLETED',
     completedAt: Date.now(),
+    initiatorToken,
+    claimerToken,
+    workspaceId: scopeId,
   });
 
   broadcastToPairingSession(sessionId, 'pairing:completed', {
@@ -416,12 +464,12 @@ router.post('/sessions/:id/approve', (req: Request, res: Response) => {
  * GET /api/pairing/sessions/:id/status
  * Polls status for clients without active WebSocket connection.
  */
-router.get('/sessions/:id/status', (req: Request, res: Response) => {
+router.get('/sessions/:id/status', async (req: Request, res: Response) => {
   const sessionId = String(req.params.id);
-  const session = store.findPairingSessionById(sessionId);
+  const session = await store.findPairingSessionByIdAsync(sessionId);
 
   if (!session) {
-    res.status(404).json({ error: 'Pairing session not found' });
+    res.status(404).json({ error: 'Pairing session not found', code: 'PAIRING_CODE_NOT_FOUND' });
     return;
   }
 
@@ -435,8 +483,11 @@ router.get('/sessions/:id/status', (req: Request, res: Response) => {
     sessionId: session.id,
     status: session.status,
     expiresAt: session.expiresAt,
+    workspaceId: session.workspaceId,
     initiator: session.initiatorDevice,
     claimer: session.claimerDevice || null,
+    initiatorToken: session.initiatorToken || null,
+    claimerToken: session.claimerToken || null,
     completedAt: session.completedAt || null,
   });
 });
@@ -445,12 +496,12 @@ router.get('/sessions/:id/status', (req: Request, res: Response) => {
  * POST /api/pairing/sessions/:id/cancel
  * Manually cancels a pairing session.
  */
-router.post('/sessions/:id/cancel', (req: Request, res: Response) => {
+router.post('/sessions/:id/cancel', async (req: Request, res: Response) => {
   const sessionId = String(req.params.id);
-  const session = store.findPairingSessionById(sessionId);
+  const session = await store.findPairingSessionByIdAsync(sessionId);
 
   if (!session) {
-    res.status(404).json({ error: 'Pairing session not found' });
+    res.status(404).json({ error: 'Pairing session not found', code: 'PAIRING_CODE_NOT_FOUND' });
     return;
   }
 

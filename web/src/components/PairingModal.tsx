@@ -29,14 +29,16 @@ interface PairingModalProps {
 export const PairingModal: React.FC<PairingModalProps> = ({ isOpen, onClose, onPaired }) => {
   const [activeTab, setActiveTab] = useState<'generate' | 'scan' | 'code'>('generate');
 
+  const isMobile = typeof navigator !== 'undefined' && /Mobile|Android|iPhone/i.test(navigator.userAgent);
+
   // Generator State
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [pairingCode, setPairingCode] = useState<string>('');
   const [expiresAt, setExpiresAt] = useState<number>(0);
   const [timeLeft, setTimeLeft] = useState<number>(120);
-  const [generatorRole, setGeneratorRole] = useState<DeviceRole>('CONTROLLER');
+  const [generatorRole, setGeneratorRole] = useState<DeviceRole>(isMobile ? 'ANDROID_GATEWAY' : 'CONTROLLER');
   const [generatorDeviceName, setGeneratorDeviceName] = useState<string>(
-    navigator.userAgent.includes('Mobile') ? 'Mobile Phone' : 'Windows Laptop'
+    isMobile ? 'Android Phone' : 'Windows Laptop'
   );
   const [copied, setCopied] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
@@ -45,9 +47,9 @@ export const PairingModal: React.FC<PairingModalProps> = ({ isOpen, onClose, onP
 
   // Manual Code State
   const [manualCodeInput, setManualCodeInput] = useState<string>('');
-  const [manualRole, setManualRole] = useState<DeviceRole>('CONTROLLER');
+  const [manualRole, setManualRole] = useState<DeviceRole>(isMobile ? 'ANDROID_GATEWAY' : 'CONTROLLER');
   const [manualDeviceName, setManualDeviceName] = useState<string>(
-    navigator.userAgent.includes('Mobile') ? 'My Android Phone' : 'My Laptop'
+    isMobile ? 'My Android Phone' : 'My Laptop'
   );
   const [isSubmittingCode, setIsSubmittingCode] = useState<boolean>(false);
   const [codeClaimedSession, setCodeClaimedSession] = useState<any | null>(null);
@@ -60,20 +62,22 @@ export const PairingModal: React.FC<PairingModalProps> = ({ isOpen, onClose, onP
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // 1. Initialize Pairing Generation
-  const initPairingSession = async () => {
+  const initPairingSession = async (roleOverride?: DeviceRole) => {
+    if (isGenerating) return;
     try {
       setIsGenerating(true);
       setClaimRequest(null);
       setPairSuccess(false);
 
+      const targetRole = roleOverride || generatorRole;
       const deviceId = `dev-${Date.now().toString().slice(-6)}`;
       const res = await api.createPairingSession({
         initiatorDeviceId: deviceId,
         initiatorDeviceName: generatorDeviceName,
-        initiatorDeviceType: (navigator.userAgent.includes('Mobile') ? 'PHONE' : 'LAPTOP') as DeviceType,
-        initiatorOs: navigator.platform || 'Windows 11',
-        initiatorGatewayRole: generatorRole,
-        printerModel: generatorRole === 'WINDOWS_GATEWAY' ? 'Canon MG2500 series Printer' : undefined,
+        initiatorDeviceType: (isMobile ? 'PHONE' : 'LAPTOP') as DeviceType,
+        initiatorOs: navigator.platform || (isMobile ? 'Android 12' : 'Windows 11'),
+        initiatorGatewayRole: targetRole,
+        printerModel: targetRole === 'WINDOWS_GATEWAY' ? 'Canon MG2500 series Printer' : targetRole === 'ANDROID_GATEWAY' ? 'Canon PIXMA MG2570S' : undefined,
       });
 
       setSessionId(res.sessionId);
@@ -105,11 +109,87 @@ export const PairingModal: React.FC<PairingModalProps> = ({ isOpen, onClose, onP
     }
   };
 
+  const handleGeneratorRoleChange = (newRole: DeviceRole) => {
+    setGeneratorRole(newRole);
+    if (!claimRequest && !pairSuccess) {
+      initPairingSession(newRole);
+    }
+  };
+
   useEffect(() => {
     if (isOpen && activeTab === 'generate') {
-      initPairingSession();
+      if (!sessionId || timeLeft <= 0) {
+        initPairingSession();
+      }
     }
-  }, [isOpen, activeTab, generatorRole]);
+  }, [isOpen, activeTab]);
+
+  // Polling for Initiator (checks for incoming claims and completion status in serverless environments)
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'generate' || !sessionId || pairSuccess) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const statusRes = await api.getPairingSessionStatus(sessionId);
+        if (statusRes.status === 'CLAIMED' && statusRes.claimer && !claimRequest) {
+          setClaimRequest({
+            sessionId: statusRes.sessionId,
+            claimer: statusRes.claimer,
+            initiator: statusRes.initiator,
+          });
+        } else if (statusRes.status === 'COMPLETED') {
+          if (statusRes.initiatorToken) {
+            localStorage.setItem('pocketprint_token', statusRes.initiatorToken);
+          }
+          if (statusRes.workspaceId) {
+            localStorage.setItem('pocketprint_workspace_id', statusRes.workspaceId);
+          }
+          setPairSuccess(true);
+          setClaimRequest(null);
+          if (onPaired) onPaired();
+          setTimeout(() => onClose(), 2500);
+        }
+      } catch (err) {
+        // Silent catch for background poll
+      }
+    }, 2000);
+
+    return () => clearInterval(pollInterval);
+  }, [isOpen, activeTab, sessionId, pairSuccess, claimRequest, onPaired, onClose]);
+
+  // Polling for Claimer (checks when host approves the claim)
+  useEffect(() => {
+    const claimSessionId = codeClaimedSession?.sessionId || codeClaimedSession?.session?.id;
+    if (!isOpen || activeTab !== 'code' || !claimSessionId || pairSuccess) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const statusRes = await api.getPairingSessionStatus(claimSessionId);
+        if (statusRes.status === 'COMPLETED') {
+          if (statusRes.claimerToken) {
+            localStorage.setItem('pocketprint_token', statusRes.claimerToken);
+          }
+          if (statusRes.workspaceId) {
+            localStorage.setItem('pocketprint_workspace_id', statusRes.workspaceId);
+          }
+          setPairSuccess(true);
+          setCodeClaimedSession(null);
+          if (onPaired) onPaired();
+          setTimeout(() => onClose(), 2500);
+        } else if (statusRes.status === 'CANCELLED') {
+          setManualError('Pairing request was declined by the host device.');
+          setCodeClaimedSession(null);
+        } else if (statusRes.status === 'EXPIRED') {
+          setManualError('Pairing session has expired. Please ask the host device to generate a new code.');
+          setCodeClaimedSession(null);
+        }
+      } catch (err) {
+        // Silent catch for background poll
+      }
+    }, 2000);
+
+    return () => clearInterval(pollInterval);
+  }, [isOpen, activeTab, codeClaimedSession, pairSuccess, onPaired, onClose]);
 
   // Countdown Timer
   useEffect(() => {
@@ -136,6 +216,14 @@ export const PairingModal: React.FC<PairingModalProps> = ({ isOpen, onClose, onP
 
     const handleCompleted = (data: any) => {
       console.log('Pairing completed:', data);
+      if (data.claimerToken) {
+        localStorage.setItem('pocketprint_token', data.claimerToken);
+      } else if (data.initiatorToken) {
+        localStorage.setItem('pocketprint_token', data.initiatorToken);
+      }
+      if (data.workspaceId) {
+        localStorage.setItem('pocketprint_workspace_id', data.workspaceId);
+      }
       setPairSuccess(true);
       setClaimRequest(null);
       if (onPaired) onPaired();
@@ -171,10 +259,20 @@ export const PairingModal: React.FC<PairingModalProps> = ({ isOpen, onClose, onP
   const handleApproveClaim = async (approved: boolean) => {
     if (!sessionId) return;
     try {
-      await api.approvePairingSession(sessionId, approved);
       if (approved) {
+        const res = await api.approvePairingSession(sessionId, true);
+        if (res.initiatorToken) {
+          localStorage.setItem('pocketprint_token', res.initiatorToken);
+        }
+        if (res.workspaceId || res.session?.workspaceId) {
+          localStorage.setItem('pocketprint_workspace_id', (res.workspaceId || res.session?.workspaceId)!);
+        }
         setPairSuccess(true);
+        setClaimRequest(null);
+        if (onPaired) onPaired();
+        setTimeout(() => onClose(), 2500);
       } else {
+        await api.cancelPairingSession(sessionId);
         setClaimRequest(null);
       }
     } catch (err: any) {
@@ -186,17 +284,21 @@ export const PairingModal: React.FC<PairingModalProps> = ({ isOpen, onClose, onP
   const handleSubmitManualCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setManualError(null);
-    if (!manualCodeInput.trim()) return;
+    const cleanCode = manualCodeInput.replace(/[^A-Z0-9]/g, '').toUpperCase();
+    if (!cleanCode) {
+      setManualError('Please enter a valid 8-digit pairing code.');
+      return;
+    }
 
     try {
       setIsSubmittingCode(true);
       const myDeviceId = `dev-${Date.now().toString().slice(-6)}`;
       const res = await api.claimPairingByCode({
-        pairingCode: manualCodeInput.trim().toUpperCase(),
+        pairingCode: cleanCode,
         claimerDeviceId: myDeviceId,
         claimerDeviceName: manualDeviceName,
-        claimerDeviceType: (navigator.userAgent.includes('Mobile') ? 'PHONE' : 'LAPTOP') as DeviceType,
-        claimerOs: navigator.platform || 'Android 12',
+        claimerDeviceType: (isMobile ? 'PHONE' : 'LAPTOP') as DeviceType,
+        claimerOs: navigator.platform || (isMobile ? 'Android 12' : 'Windows 11'),
         claimerGatewayRole: manualRole,
         printerModel: manualRole === 'ANDROID_GATEWAY' ? 'Canon PIXMA MG2570S' : undefined,
       });
@@ -209,7 +311,24 @@ export const PairingModal: React.FC<PairingModalProps> = ({ isOpen, onClose, onP
         socket.emit('pairing:join', { sessionId: res.sessionId });
       }
     } catch (err: any) {
-      setManualError(err.message || 'Failed to claim code. Check for typos or expired code.');
+      const details = err.sanitizedDetails || {};
+      const backendCode = details.code || err.code;
+
+      if (backendCode === 'PAIRING_CODE_NOT_FOUND' || err.message?.includes('not found')) {
+        setManualError('Pairing code not found. Please verify the 8-digit code displayed on the other device.');
+      } else if (backendCode === 'PAIRING_CODE_EXPIRED' || err.message?.includes('expired')) {
+        setManualError('Pairing session has expired. Please tap "New Code" on the other device and try again.');
+      } else if (backendCode === 'PAIRING_CODE_ALREADY_USED') {
+        setManualError('This pairing code has already been used. Please generate a new code.');
+      } else if (backendCode === 'PAIRING_DEVICE_ROLE_INVALID' || err.message?.includes('Conflicting')) {
+        setManualError('Conflicting roles: Both devices cannot have the same gateway role. One must be Controller and the other Gateway.');
+      } else if (backendCode === 'PAIRING_ATTEMPTS_EXCEEDED') {
+        setManualError('Too many failed attempts. Session closed. Please generate a new code.');
+      } else if (backendCode === 'PAIRING_CODE_INVALID') {
+        setManualError('Invalid pairing code. Please enter the valid 8-digit code.');
+      } else {
+        setManualError(err.userFriendlyMessage || err.message || 'Failed to claim code. Check for typos or expired code.');
+      }
     } finally {
       setIsSubmittingCode(false);
     }
@@ -324,7 +443,7 @@ export const PairingModal: React.FC<PairingModalProps> = ({ isOpen, onClose, onP
                 </div>
                 <select
                   value={generatorRole}
-                  onChange={(e) => setGeneratorRole(e.target.value as DeviceRole)}
+                  onChange={(e) => handleGeneratorRoleChange(e.target.value as DeviceRole)}
                   className="bg-neutral-800 border border-neutral-700 text-xs text-neutral-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-emerald-500"
                 >
                   <option value="CONTROLLER">Remote Controller (Send Prints)</option>
@@ -371,7 +490,7 @@ export const PairingModal: React.FC<PairingModalProps> = ({ isOpen, onClose, onP
                   </span>
                 </div>
                 <button
-                  onClick={initPairingSession}
+                  onClick={() => initPairingSession()}
                   className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-medium transition"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
@@ -464,7 +583,14 @@ export const PairingModal: React.FC<PairingModalProps> = ({ isOpen, onClose, onP
                   type="text"
                   placeholder="e.g. 7492-8163"
                   value={manualCodeInput}
-                  onChange={(e) => setManualCodeInput(e.target.value.toUpperCase())}
+                  onChange={(e) => {
+                    const raw = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+                    if (raw.length > 4) {
+                      setManualCodeInput(`${raw.slice(0, 4)}-${raw.slice(4)}`);
+                    } else {
+                      setManualCodeInput(raw);
+                    }
+                  }}
                   maxLength={9}
                   className="w-full px-4 py-3 bg-neutral-950 border border-neutral-800 rounded-xl text-center font-mono text-xl tracking-widest text-emerald-400 placeholder:text-neutral-700 focus:outline-none focus:border-emerald-500"
                 />

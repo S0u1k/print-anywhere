@@ -101,6 +101,8 @@ export interface PairingSession {
   userId?: string;
   initiatorDevice: DeviceSummary;
   claimerDevice?: DeviceSummary;
+  initiatorToken?: string;
+  claimerToken?: string;
   status: PairingStatus;
   attempts: number;
   maxAttempts: number;
