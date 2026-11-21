@@ -19,6 +19,8 @@ import {
 import { api } from '../services/api';
 import { getSocket } from '../services/socket';
 import { DeviceRole, DeviceType } from '../types';
+import { QrScanner } from './QrScanner';
+import { QrParsedPayload } from '../utils/qrPayloadParser';
 
 interface PairingModalProps {
   isOpen: boolean;
@@ -55,10 +57,7 @@ export const PairingModal: React.FC<PairingModalProps> = ({ isOpen, onClose, onP
   const [codeClaimedSession, setCodeClaimedSession] = useState<any | null>(null);
   const [manualError, setManualError] = useState<string | null>(null);
 
-  // Scanner State
-  const [cameraActive, setCameraActive] = useState<boolean>(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  // QR Canvas Ref (for Generator QR Code)
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // 1. Initialize Pairing Generation
@@ -160,7 +159,7 @@ export const PairingModal: React.FC<PairingModalProps> = ({ isOpen, onClose, onP
   // Polling for Claimer (checks when host approves the claim)
   useEffect(() => {
     const claimSessionId = codeClaimedSession?.sessionId || codeClaimedSession?.session?.id;
-    if (!isOpen || activeTab !== 'code' || !claimSessionId || pairSuccess) return;
+    if (!isOpen || !claimSessionId || pairSuccess) return;
 
     const pollInterval = setInterval(async () => {
       try {
@@ -334,40 +333,62 @@ export const PairingModal: React.FC<PairingModalProps> = ({ isOpen, onClose, onP
     }
   };
 
-  // Camera Scanner Starter
-  const startCamera = async () => {
-    setCameraError(null);
+  // Submit QR pairing payload (from camera scanner)
+  const handleQrScanSuccess = async (payload: QrParsedPayload) => {
+    setManualError(null);
+    const myDeviceId = `dev-${Date.now().toString().slice(-6)}`;
+    const myOs = navigator.platform || (isMobile ? 'Android 14' : 'Windows 11');
+
     try {
-      setCameraActive(true);
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
+      let res: any;
+      if (payload.sessionId) {
+        res = await api.claimPairingSession(payload.sessionId, {
+          qrToken: payload.qrToken,
+          pairingCode: payload.pairingCode,
+          claimerDeviceId: myDeviceId,
+          claimerDeviceName: manualDeviceName,
+          claimerDeviceType: (isMobile ? 'PHONE' : 'LAPTOP') as DeviceType,
+          claimerOs: myOs,
+          claimerGatewayRole: manualRole,
+          printerModel: manualRole === 'ANDROID_GATEWAY' ? 'Canon PIXMA MG2570S' : undefined,
+        });
+      } else if (payload.pairingCode) {
+        res = await api.claimPairingByCode({
+          pairingCode: payload.pairingCode,
+          claimerDeviceId: myDeviceId,
+          claimerDeviceName: manualDeviceName,
+          claimerDeviceType: (isMobile ? 'PHONE' : 'LAPTOP') as DeviceType,
+          claimerOs: myOs,
+          claimerGatewayRole: manualRole,
+          printerModel: manualRole === 'ANDROID_GATEWAY' ? 'Canon PIXMA MG2570S' : undefined,
+        });
+      } else {
+        throw new Error('Unrecognized QR Code payload');
+      }
+
+      setCodeClaimedSession(res);
+
+      const socket = getSocket();
+      if (socket && res.sessionId) {
+        socket.emit('pairing:join', { sessionId: res.sessionId });
       }
     } catch (err: any) {
-      setCameraError('Camera access denied or unavailable. Please use the Manual Code tab.');
-      setCameraActive(false);
+      const details = err.sanitizedDetails || {};
+      const backendCode = details.code || err.code;
+
+      if (backendCode === 'PAIRING_CODE_NOT_FOUND' || err.message?.includes('not found')) {
+        throw new Error('Pairing session not found. Please generate a new QR code on the host device.');
+      } else if (backendCode === 'PAIRING_CODE_EXPIRED' || err.message?.includes('expired')) {
+        throw new Error('Pairing session has expired. Please tap "New Code" on the other device.');
+      } else if (backendCode === 'PAIRING_CODE_ALREADY_USED') {
+        throw new Error('This pairing code has already been used. Please generate a new QR code.');
+      } else if (backendCode === 'PAIRING_DEVICE_ROLE_INVALID' || err.message?.includes('Conflicting')) {
+        throw new Error('Conflicting roles: Both devices cannot have the same gateway role.');
+      } else {
+        throw new Error(err.userFriendlyMessage || err.message || 'Failed to claim pairing session.');
+      }
     }
   };
-
-  const stopCamera = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach((track) => track.stop());
-    }
-    setCameraActive(false);
-  };
-
-  useEffect(() => {
-    if (activeTab === 'scan') {
-      startCamera();
-    } else {
-      stopCamera();
-    }
-    return () => stopCamera();
-  }, [activeTab]);
 
   if (!isOpen) return null;
 
@@ -542,31 +563,47 @@ export const PairingModal: React.FC<PairingModalProps> = ({ isOpen, onClose, onP
 
           {/* TAB 2: SCAN QR CODE */}
           {activeTab === 'scan' && (
-            <div className="flex flex-col items-center space-y-4 text-center">
-              <div className="text-xs text-neutral-400">
-                Point your camera at the QR code displayed on your other device
-              </div>
-
-              <div className="relative w-full max-w-xs h-64 bg-black rounded-2xl overflow-hidden border border-neutral-800 flex items-center justify-center">
-                <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
-                <div className="absolute inset-8 border-2 border-dashed border-emerald-500/60 rounded-xl pointer-events-none" />
-                {!cameraActive && cameraError && (
-                  <div className="absolute inset-0 p-4 bg-neutral-950 flex flex-col items-center justify-center text-xs text-neutral-400">
-                    <AlertCircle className="w-8 h-8 text-amber-400 mb-2" />
-                    <span>{cameraError}</span>
-                    <button
-                      onClick={() => setActiveTab('code')}
-                      className="mt-3 px-3 py-1.5 bg-neutral-800 text-neutral-200 rounded-lg hover:bg-neutral-700 text-xs"
-                    >
-                      Use Manual Code Instead
-                    </button>
+            <div className="w-full">
+              {codeClaimedSession && !pairSuccess ? (
+                <div className="p-6 bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 text-xs rounded-2xl flex flex-col items-center justify-center space-y-3">
+                  <RefreshCw className="w-6 h-6 text-emerald-400 animate-spin" />
+                  <div className="font-semibold text-white text-sm">QR Code Accepted! Awaiting Host Approval</div>
+                  <div className="text-xs text-neutral-300 text-center max-w-sm">
+                    Please approve the pairing prompt on your other device (<strong>{codeClaimedSession.initiator?.name || 'Host Device'}</strong>).
                   </div>
-                )}
-              </div>
+                </div>
+              ) : pairSuccess ? (
+                <div className="p-6 bg-emerald-500/20 border border-emerald-500 text-emerald-300 rounded-2xl text-xs flex items-center justify-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                  <span className="text-sm font-semibold">Paired and authorized successfully!</span>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Role Configuration for scanner device */}
+                  <div className="w-full flex items-center justify-between p-3 bg-neutral-950/60 border border-neutral-800 rounded-xl text-left">
+                    <div>
+                      <div className="text-xs font-medium text-white">This Device Functionality</div>
+                      <div className="text-[11px] text-neutral-400">Configure role for remote printing</div>
+                    </div>
+                    <select
+                      value={manualRole}
+                      onChange={(e) => setManualRole(e.target.value as DeviceRole)}
+                      className="bg-neutral-800 border border-neutral-700 text-xs text-neutral-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-emerald-500"
+                    >
+                      <option value="CONTROLLER">Remote Controller (Send Prints)</option>
+                      <option value="ANDROID_GATEWAY">Android Gateway (USB OTG)</option>
+                      <option value="WINDOWS_GATEWAY">Windows Gateway (Canon USB)</option>
+                    </select>
+                  </div>
 
-              <p className="text-[11px] text-neutral-400 max-w-sm">
-                Webcam scanning requires camera permission. If your browser or environment does not support webcam streaming, please select <strong>Enter Pairing Code</strong>.
-              </p>
+                  <QrScanner
+                    isActive={isOpen && activeTab === 'scan'}
+                    onScanSuccess={handleQrScanSuccess}
+                    onSwitchToManual={() => setActiveTab('code')}
+                    onCancel={onClose}
+                  />
+                </div>
+              )}
             </div>
           )}
 

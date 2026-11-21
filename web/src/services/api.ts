@@ -103,7 +103,15 @@ export const api = {
       claimerGatewayRole: string;
       printerModel?: string;
     }
-  ): Promise<{ message: string; session: PairingSession; deviceToken?: string }> {
+  ): Promise<{
+    message: string;
+    sessionId?: string;
+    status?: string;
+    session?: PairingSession;
+    initiator?: any;
+    claimer?: any;
+    deviceToken?: string;
+  }> {
     return apiClient.post(`/pairing/sessions/${sessionId}/claim`, data);
   },
 
