@@ -43,5 +43,10 @@
     "ts-jest": "^29.4.15",
     "tsx": "^4.23.15",
     "typescript": "^5.4.5"
+  },
+  "allowScripts": {
+    "@firebase/util": true,
+    "protobufjs": true,
+    "esbuild": true
   }
 }
