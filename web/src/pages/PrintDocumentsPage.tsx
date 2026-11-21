@@ -55,9 +55,17 @@ export const PrintDocumentsPage: React.FC<PrintDocumentsPageProps> = ({
 
   const preferredMode = (localStorage.getItem('pocketprint_preferred_mode') as any) || 'mode_a';
 
-  // Initialize selected destination, prioritizing user's active gateway mode
+  const MAX_FILE_SIZE_MB = 4.5;
+  const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
+  // Check if current selectedDestinationId is valid against live printers or devices
+  const isSelectedDestinationValid =
+    (selectedDestinationId.startsWith('printer:') && printers.some((p) => `printer:${p.id}` === selectedDestinationId)) ||
+    (selectedDestinationId.startsWith('device:') && devices.some((d) => `device:${d.id}` === selectedDestinationId));
+
+  // Auto-select valid destination prioritizing user's active gateway mode
   React.useEffect(() => {
-    if (!selectedDestinationId) {
+    if (!isSelectedDestinationValid) {
       if (preferredMode === 'mode_b') {
         const androidPrn = printers.find((p) => p.gatewayType === 'ANDROID_USB');
         const androidDev = devices.find((d) => d.gatewayType === 'ANDROID_USB' || (!d.gatewayType && !d.name.includes('Windows')));
@@ -84,9 +92,11 @@ export const PrintDocumentsPage: React.FC<PrintDocumentsPageProps> = ({
         setSelectedDestinationId(`printer:${printers[0].id}`);
       } else if (devices.length > 0) {
         setSelectedDestinationId(`device:${devices[0].id}`);
+      } else {
+        setSelectedDestinationId('');
       }
     }
-  }, [printers, devices, selectedDestinationId, preferredMode]);
+  }, [printers, devices, isSelectedDestinationValid, preferredMode]);
 
   // Resolve target details
   let targetName = 'No destination selected';
@@ -117,11 +127,23 @@ export const PrintDocumentsPage: React.FC<PrintDocumentsPageProps> = ({
     }
   }
 
+  const hasValidDestination =
+    isSelectedDestinationValid && targetName !== 'No destination selected' && selectedDestinationId !== '';
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selected = e.target.files[0];
       if (selected.type !== 'application/pdf' && !selected.name.toLowerCase().endsWith('.pdf')) {
         toast.error('Please select a valid PDF file (.pdf)', 'Invalid File Type');
+        return;
+      }
+      if (selected.size > MAX_FILE_SIZE_BYTES) {
+        toast.error(
+          `File size (${(selected.size / (1024 * 1024)).toFixed(2)} MB) exceeds Cloud Relay payload limit (${MAX_FILE_SIZE_MB} MB on Vercel). Please select a PDF document under 4.5 MB.`,
+          'File Size Limit Exceeded'
+        );
+        e.target.value = '';
+        setFile(null);
         return;
       }
       setFile(selected);
@@ -135,15 +157,28 @@ export const PrintDocumentsPage: React.FC<PrintDocumentsPageProps> = ({
       toast.warning('Please select a PDF document first', 'Missing File');
       return;
     }
-    if (!selectedDestinationId) {
-      toast.warning('Please select an active destination gateway/printer', 'No Destination');
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      toast.error(
+        `File size (${(file.size / (1024 * 1024)).toFixed(2)} MB) exceeds Cloud Relay limit (${MAX_FILE_SIZE_MB} MB).`,
+        'File Too Large'
+      );
+      return;
+    }
+    if (!hasValidDestination) {
+      toast.warning(
+        'No destination gateway or printer connected. Please connect your Android phone or Windows laptop gateway first.',
+        'No Destination Connected'
+      );
       return;
     }
     setShowConfirmModal(true);
   };
 
   const executePrint = async () => {
-    if (!file || !selectedDestinationId) return;
+    if (!file || !hasValidDestination) {
+      toast.warning('Cannot dispatch: No active destination gateway/printer selected', 'Destination Required');
+      return;
+    }
 
     setLoading(true);
 
@@ -224,7 +259,7 @@ export const PrintDocumentsPage: React.FC<PrintDocumentsPageProps> = ({
                 ) : (
                   <div>
                     <span className="text-sm font-semibold text-white block">Drop PDF here or click to browse</span>
-                    <span className="text-xs text-gray-400 block mt-1">Files up to 50MB supported</span>
+                    <span className="text-xs text-gray-400 block mt-1">PDF documents up to 4.5 MB supported</span>
                   </div>
                 )}
               </label>
@@ -414,10 +449,14 @@ export const PrintDocumentsPage: React.FC<PrintDocumentsPageProps> = ({
             variant="primary"
             size="lg"
             className="w-full sm:w-auto px-8"
-            disabled={!file || !selectedDestinationId}
+            disabled={!file || !hasValidDestination || file.size > MAX_FILE_SIZE_BYTES}
             rightIcon={<ArrowRight className="w-4 h-4" />}
           >
-            Review & Send Print Job
+            {!hasValidDestination
+              ? 'Connect Gateway / Printer First'
+              : !file
+              ? 'Select a PDF Document'
+              : 'Review & Send Print Job'}
           </Button>
         </div>
       </form>
@@ -430,6 +469,15 @@ export const PrintDocumentsPage: React.FC<PrintDocumentsPageProps> = ({
         description="Verify your document specifications and target hardware"
       >
         <div className="space-y-4">
+          {!hasValidDestination && (
+            <div className="p-3 rounded-lg bg-amber-950/40 border border-amber-800/80 text-xs text-amber-300 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-400" />
+              <span>
+                No active printer or gateway is connected to receive this job. Please pair your Android phone or Windows laptop first.
+              </span>
+            </div>
+          )}
+
           <div className="p-4 rounded-xl bg-[#162032] border border-gray-800 space-y-2 text-xs">
             <div className="flex justify-between">
               <span className="text-gray-400">Document:</span>
@@ -441,7 +489,9 @@ export const PrintDocumentsPage: React.FC<PrintDocumentsPageProps> = ({
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400">Destination:</span>
-              <span className="font-semibold text-blue-400">{targetName}</span>
+              <span className={`font-semibold ${hasValidDestination ? 'text-blue-400' : 'text-amber-400'}`}>
+                {targetName}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400">Gateway Mode:</span>
@@ -476,6 +526,7 @@ export const PrintDocumentsPage: React.FC<PrintDocumentsPageProps> = ({
               variant="primary"
               onClick={executePrint}
               isLoading={loading}
+              disabled={loading || !hasValidDestination || !file || file.size > MAX_FILE_SIZE_BYTES}
               leftIcon={<Printer className="w-4 h-4" />}
             >
               Confirm & Dispatch

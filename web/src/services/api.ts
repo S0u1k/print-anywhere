@@ -198,7 +198,7 @@ export const api = {
   },
 
   async uploadPrintJob(formData: FormData): Promise<{ message: string; job: PrintJob }> {
-    return apiClient.post('/jobs/upload', formData);
+    return apiClient.post('/jobs/upload', formData, { timeoutMs: 90000 });
   },
 
   async cancelJob(id: string): Promise<{ message: string; job: PrintJob }> {
